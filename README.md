@@ -74,6 +74,15 @@ Como rodar (na raiz do projeto):
 .venv/bin/uvicorn main:app --app-dir backend --port 8321
 ```
 
+Deploy no CasaOS via CLI (compose sem mounts, só a imagem):
+
+```bash
+docker compose build                                  # gera mdtodocs:dev
+casaos-cli app-management install -f docker-compose.casaos.yml
+casaos-cli app-management apply mdtodocs -f docker-compose.casaos.yml  # atualizar
+# atenção: uninstall apaga a imagem local — rebuild antes de reinstalar
+```
+
 Validações: `scripts/verificar.py` (ODT → PDF visual), testes unitários
 de backend e suíte e2e com Firefox headless (abrir painel, editar estilo,
 ver o preview, exportar e conferir o payload).
@@ -85,6 +94,7 @@ mdToDocs/
 ├── README.md
 ├── Dockerfile           # imagem do servidor (python:3.13-slim)
 ├── docker-compose.yml   # sobe com mounts + hot reload do backend
+├── docker-compose.casaos.yml  # deploy via casaos-cli (só imagem)
 ├── rodar.sh             # sobe/para/logs do container em 1 comando
 ├── backend/
 │   ├── main.py          # FastAPI: endpoints de conversão

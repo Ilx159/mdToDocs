@@ -1,0 +1,34 @@
+# Deploy via CasaOS CLI:
+#   docker compose build                             # gera a imagem mdtodocs:dev
+#   casaos-cli app-management install -f docker-compose.casaos.yml
+#   casaos-cli app-management apply mdtodocs -f docker-compose.casaos.yml  # atualizar
+#   casaos-cli app-management uninstall mdtodocs     (desinstalar — APAGA a imagem!)
+#
+# Sem build/mounts de propósito: o CasaOS copia o compose para
+# /var/lib/casaos/apps/ e sempre tenta puxar a imagem do registry
+# (pull falho é ignorado se a imagem já existir localmente).
+# Depois de uninstall, rebuild antes de reinstalar.
+name: mdtodocs
+services:
+  mdtodocs:
+    image: mdtodocs:dev
+    ports:
+      - "8321:8000"
+    restart: unless-stopped
+x-casaos:
+  title:
+    en_US: mdToDocs
+  tagline:
+    en_US: Markdown to ODT
+  description:
+    en_US: Editor Markdown com painel de estilos, notas de rodape, formulas e exportacao para ODT.
+  category: Productivity
+  author: ilx159
+  developer: ilx159
+  main: mdtodocs
+  index: /
+  port_map: "8321"
+  scheme: http
+  architectures:
+    - amd64
+    - arm64
