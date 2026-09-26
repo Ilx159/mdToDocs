@@ -67,11 +67,11 @@ Como rodar (na raiz do projeto):
 ```bash
 ./rodar.sh                   # sobe o container e confirma que responde
 ./rodar.sh logs              # acompanhar | ./rodar.sh stop = parar
-# abre http://localhost:8000
+# abre http://localhost:8321
 # backend com hot reload (--reload); frontend estático reflete na hora
 
 # sem Docker
-.venv/bin/uvicorn main:app --app-dir backend --port 8000
+.venv/bin/uvicorn main:app --app-dir backend --port 8321
 ```
 
 Validações: `scripts/verificar.py` (ODT → PDF visual), testes unitários

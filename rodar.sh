@@ -6,11 +6,11 @@
 #   ./rodar.sh stop            para o container
 #   ./rodar.sh restart         reinicia (útil depois de mexer no compose)
 #
-# Endereço: http://localhost:8000
+# Endereço: http://localhost:8321
 set -euo pipefail
 cd "$(dirname "$0")"   # sempre na raiz do projeto
 
-URL="http://localhost:8000"
+URL="http://localhost:8321"
 
 # o grupo docker pode ainda não estar ativo no shell atual → tenta sem
 # sudo primeiro e cai para "sudo -n" (sem pedir senha) se precisar
