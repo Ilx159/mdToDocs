@@ -13,7 +13,9 @@ services:
   mdtodocs:
     image: mdtodocs:dev
     ports:
-      - "8321:8000"
+      # porta única: interna = externa = 8321 (o CasaOS grava
+      # target = published = port_map ao editar/salvar na UI)
+      - "8321:8321"
     restart: unless-stopped
 x-casaos:
   title:

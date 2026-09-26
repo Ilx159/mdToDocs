@@ -7,19 +7,20 @@
 # No modo compose o código fica montado por cima da imagem com
 # --reload: mudança no backend/ reinicia sozinha; frontend é
 # estático e reflete na hora. Para rodar "fechado" (sem mounts):
-#   docker build -t mdtodocs . && docker run -d -p 8321:8000 mdtodocs
+#   docker build -t mdtodocs:dev . && docker run -d -p 8321:8321 mdtodocs:dev
 
 services:
   mdtodocs:
     build: .
     image: mdtodocs:dev
     ports:
-      # host:contêiner — 8321 evita colisão com 8000/8080/3000 comuns
-      - "8321:8000"
+      # host:contêiner — 8321 evita colisão com 8000/8080/3000 comuns;
+      # interna também é 8321 (regra de porta única do CasaOS)
+      - "8321:8321"
     restart: unless-stopped
     volumes:
       - ./backend:/app/backend
       - ./frontend:/app/frontend
     command: >
       uvicorn main:app --app-dir backend
-      --host 0.0.0.0 --port 8000 --reload
+      --host 0.0.0.0 --port 8321 --reload
