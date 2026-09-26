@@ -1,0 +1,1000 @@
+/* Tokens do tema. O tema claro é o padrão; [data-tema="escuro"] no <html>
+   sobrescreve. --primario (destaque), --fonte-editor e --tamanho-editor
+   vêm do painel de Configurações (interface.js) — o script no <head>
+   aplica antes do 1º paint para não piscar o tema errado. */
+:root {
+  /* destaque padrão (Configurações → Cor de destaque) */
+  --primario: #2f6fed;
+  --primario-hover: color-mix(in srgb, var(--primario) 84%, #000);
+  --primario-ativo: color-mix(in srgb, var(--primario) 68%, #000);
+
+  --fonte-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --fonte-editor: "SF Mono", "Fira Code", Consolas, monospace;
+  --tamanho-editor: 14px;
+
+  --raio: 7px;
+  --transicao: 150ms ease;
+  --barra-h: 49px; /* interface.js mede a .barra real e sobrescreve */
+
+  /* --- tema CLARO (padrão) --- */
+  --app-fundo: #eceef2;
+  --texto: #1c212b;
+  --texto-suave: #5f6673;
+  --borda: #d7dbe3;
+  --borda-forte: #c2c8d4;
+  --barra-fundo: #ffffff;
+  --barra-texto: #1c212b;
+  --barra-borda: #d7dbe3;
+  --campo-fundo: #ffffff;
+  --botao: #eceef2;
+  --botao-hover: #e0e3ea;
+  --botao-texto: #333a46;
+  --editor-fundo: #fbfcfd;
+  --editor-texto: #242a35;
+  --painel-fundo: #ffffff;
+  --painel-borda: #d7dbe3;
+  --painel-titulo-fundo: #f4f5f8;
+  --painel-titulo-texto: #5f6673;
+  --sombra: 0 10px 34px rgba(18, 24, 38, 0.18);
+}
+
+[data-tema="escuro"] {
+  --app-fundo: #10131a;
+  --texto: #e8eaf0;
+  --texto-suave: #9aa4b8;
+  --borda: #2a3140;
+  --borda-forte: #3b455a;
+  --barra-fundo: #1a1f2b;
+  --barra-texto: #e8eaf0;
+  --barra-borda: #2a3140;
+  --campo-fundo: #12151c;
+  --botao: #2a3140;
+  --botao-hover: #374054;
+  --botao-texto: #e8eaf0;
+  --editor-fundo: #171b24;
+  --editor-texto: #d6dae2;
+  --painel-fundo: #1a1f2b;
+  --painel-borda: #2a3140;
+  --painel-titulo-fundo: #202634;
+  --painel-titulo-texto: #9aa4b8;
+  --sombra: 0 10px 34px rgba(0, 0, 0, 0.55);
+}
+
+/* Configurações → Animações: desliga todas as transições/animações */
+[data-animacoes="off"] *,
+[data-animacoes="off"] *::before,
+[data-animacoes="off"] *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: var(--fonte-ui);
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--app-fundo);
+  color: var(--texto);
+}
+
+/* durante o arraste da divisória/drawer: não selecionar texto */
+body.sem-selecao { user-select: none; }
+
+/* ---------- barra de ações (ícones + tooltips) ---------- */
+
+.barra {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  min-height: 44px;
+  background: var(--barra-fundo);
+  color: var(--barra-texto);
+  border-bottom: 1px solid var(--barra-borda);
+}
+
+.marca {
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.nome-arquivo {
+  width: 170px;
+  padding: 6px 10px;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--campo-fundo);
+  color: var(--texto);
+  font-size: 13px;
+}
+
+.acoes {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.status {
+  font-size: 12px;
+  color: var(--texto-suave);
+  margin-right: 6px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.separador {
+  width: 1px;
+  height: 20px;
+  margin: 0 5px;
+  background: var(--barra-borda);
+}
+
+/* botão de ícone (label ou button) — tooltip via title */
+.icone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: var(--raio);
+  background: transparent;
+  color: var(--barra-texto);
+  cursor: pointer;
+  transition: background var(--transicao), color var(--transicao);
+}
+
+.icone:hover { background: var(--botao); }
+.icone:active { background: var(--botao-hover); }
+.icone svg { width: 18px; height: 18px; }
+
+label.icone, label.botao { cursor: pointer; }
+
+/* ícone do tema: mostra sol (tema claro) ou lua (tema escuro) */
+.ic-lua { display: none; }
+[data-tema="escuro"] .ic-sol { display: none; }
+[data-tema="escuro"] .ic-lua { display: block; }
+
+.botao {
+  padding: 7px 14px;
+  border: none;
+  border-radius: var(--raio);
+  background: var(--botao);
+  color: var(--botao-texto);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--transicao);
+}
+
+.botao:hover { background: var(--botao-hover); }
+
+.botao.primario { background: var(--primario); color: #fff; }
+.botao.primario:hover { background: var(--primario-hover); }
+.botao.primario:active { background: var(--primario-ativo); }
+
+/* ---------- split editor/preview (divisória arrastável) ---------- */
+
+.split {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.painel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* editor tem largura fixa (proporção da Configurações, lembrada);
+   preview ocupa o resto. interface.js define style.width em #painel-editor */
+#painel-editor { flex: none; width: 45%; }
+
+/* divisória arrastável: pointer events no interface.js */
+.divisor {
+  flex: none;
+  width: 8px;
+  cursor: col-resize;
+  background: var(--app-fundo);
+  border-left: 1px solid var(--borda);
+  border-right: 1px solid var(--borda);
+  transition: background var(--transicao), border-color var(--transicao);
+}
+
+.divisor:hover,
+.divisor.arrastando {
+  background: var(--primario);
+  border-color: var(--primario);
+}
+
+.painel-titulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--painel-titulo-texto);
+  background: var(--painel-titulo-fundo);
+  border-bottom: 1px solid var(--borda);
+}
+
+.modo-grupo { display: flex; gap: 4px; }
+
+.modo {
+  padding: 2px 10px;
+  border: 1px solid var(--borda-forte);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--painel-titulo-texto);
+  font-size: 11px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: background var(--transicao), color var(--transicao);
+}
+
+.modo.ativo {
+  background: var(--primario);
+  border-color: var(--primario);
+  color: #fff;
+}
+
+#editor {
+  flex: 1;
+  padding: 18px;
+  border: none;
+  resize: none;
+  outline: none;
+  background: var(--editor-fundo);
+  color: var(--editor-texto);
+  font-family: var(--fonte-editor);
+  font-size: var(--tamanho-editor);
+  line-height: 1.6;
+  caret-color: var(--primario);
+}
+
+/* ---------- preview (aproxima o visual do documento ODT) ---------- */
+
+.preview {
+  flex: 1;
+  overflow: auto;
+  padding: 40px 56px;
+  background: #fdfdfd;
+  color: #1a1a1a;
+  font-family: "Liberation Serif", Georgia, serif;
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.preview h1, .preview h2, .preview h3,
+.preview h4, .preview h5, .preview h6 {
+  font-family: system-ui, sans-serif;
+  margin: 1.1em 0 0.4em;
+  line-height: 1.25;
+}
+
+.preview h1 { font-size: 2em; }
+.preview h2 { font-size: 1.5em; }
+.preview h3 { font-size: 1.25em; }
+
+.preview p { margin: 0 0 0.7em; }
+
+.preview a { color: #0000ee; }
+
+.preview code {
+  font-family: Consolas, "Liberation Mono", monospace;
+  font-size: 0.9em;
+  background: #eeeeee;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.preview pre {
+  background: #f5f5f5;
+  border: 1px solid #dddddd;
+  padding: 12px 14px;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.preview pre code {
+  background: none;
+  padding: 0;
+}
+
+.preview blockquote {
+  margin: 0.8em 0.5cm;
+  padding-left: 0.3cm;
+  border-left: 2pt solid #888888;
+  color: #555555;
+  font-style: italic;
+}
+
+.preview ul, .preview ol { padding-left: 1.5em; }
+
+.preview table {
+  border-collapse: collapse;
+  margin: 1em 0;
+}
+
+.preview th, .preview td {
+  border: 1px solid #cccccc;
+  padding: 6px 12px;
+}
+
+.preview th { background: #f0f0f0; }
+
+.preview img { max-width: 100%; }
+
+/* ============================================================
+   MODO ODT — espelha styles.xml / content.xml do .odt exportado
+   Página A4 (21cm) com margens de 2cm, texto 12pt serifado.
+
+   Os valores entram como variáveis CSS (herdadas pelo preview):
+   o painel de estilos (app.js → aplicarEstilos) reescreve as
+   variáveis inline em #preview e o backend gera o styles.xml
+   com o MESMO dicionário (styles.py) — preview e .odt andam juntos.
+   ============================================================ */
+
+.preview.odt {
+  --fonte: "Liberation Serif", Georgia, serif;
+  --tamanho: 12pt;
+  --entrelinha: 1.2;
+  --margem-par: 0.25cm;
+  --margem-pag: 2cm;
+  --h1: 22pt;
+  --h2: 18pt;
+  --h3: 16pt;
+  --h4: 14pt;
+  --h5: 13pt;
+  --h6: 12pt;
+  --nota: 10pt;
+  background: #e9e9e9;
+  padding: 28px 16px;
+  font-family: var(--fonte);
+  font-size: var(--tamanho);
+  line-height: var(--entrelinha);
+}
+
+/* position relative: âncora para o bloco de notas no pé da folha */
+.preview.odt .pagina {
+  width: 21cm;
+  min-height: 29.7cm;
+  margin: 0 auto;
+  padding: var(--margem-pag);
+  background: #fff;
+  color: #000;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  position: relative;
+}
+
+/* bloco de notas ancorado no pé da folha quando tudo cabe em 1 página
+   (ver posicionarNotas no app.js): left/right/bottom = a margem
+   do .pagina → acompanha exatamente a área de texto do .odt */
+.preview.odt .notas-pe {
+  position: absolute;
+  left: var(--margem-pag);
+  right: var(--margem-pag);
+  bottom: var(--margem-pag);
+}
+
+/* títulos no ODT herdam a fonte padrão e são 100% bold;
+   a entrelinha vem do style:line-height do default-style */
+.preview.odt h1, .preview.odt h2, .preview.odt h3,
+.preview.odt h4, .preview.odt h5, .preview.odt h6 {
+  font-family: inherit;
+  font-weight: bold;
+  line-height: var(--entrelinha);
+}
+
+.preview.odt h1 { font-size: var(--h1); margin: 0.6cm 0 0.3cm; }
+.preview.odt h2 { font-size: var(--h2); margin: 0.5cm 0 0.25cm; }
+.preview.odt h3 { font-size: var(--h3); margin: 0.4cm 0 0.2cm; }
+.preview.odt h4 { font-size: var(--h4); margin: 0.4cm 0 0.2cm; }
+.preview.odt h5 { font-size: var(--h5); margin: 0.3cm 0 0.2cm; }
+.preview.odt h6 { font-size: var(--h6); margin: 0.3cm 0 0.2cm; }
+
+.preview.odt p { margin: 0 0 var(--margem-par); }
+
+.preview.odt a { color: #0000ee; text-decoration: underline; }
+
+.preview.odt code {
+  font-family: "Liberation Mono", monospace;
+  background: #eeeeee;
+  border-radius: 0;
+}
+
+.preview.odt pre {
+  background: #f5f5f5;
+  border: 0.5pt solid #dddddd;
+  border-radius: 0;
+  padding: 0.2cm;
+  margin: 0.2cm 0;
+  font-size: 10pt;
+}
+
+.preview.odt blockquote {
+  margin: 0.2cm 0.5cm;
+  padding: 0 0 0 0.3cm;
+  border-left: 2pt solid #888888;
+  color: #555555;
+  font-style: italic;
+}
+
+.preview.odt blockquote p { margin-bottom: 0.2cm; }
+
+/* listas: space-before 0.75cm / 1.5cm conforme níveis do styles.xml;
+   a margem inferior do último item vem do default-style (margemParagrafo) */
+.preview.odt ul, .preview.odt ol {
+  margin: 0 0 var(--margem-par);
+  padding-left: 0.75cm;
+}
+
+.preview.odt ul ul, .preview.odt ol ol,
+.preview.odt ul ol, .preview.odt ol ul { padding-left: 0.75cm; }
+
+/* tabela: largura útil (100%); margem espelha o parágrafo (TextBody) */
+.preview.odt table {
+  width: 100%;
+  margin: var(--margem-par) 0;
+  border-collapse: collapse;
+}
+
+.preview.odt th, .preview.odt td {
+  border: 0.5pt solid #999999;
+  padding: 0.05cm;
+}
+
+.preview.odt th {
+  background: transparent;
+  font-weight: bold;
+}
+
+/* linha horizontal (estilo HorizontalRule do styles.xml) */
+.preview.odt hr {
+  border: none;
+  border-bottom: 0.5pt solid #999999;
+  margin: 0.3cm 0;
+}
+
+/* imagens embutidas: mesma área útil do .odt — largura = 21cm − 2×margem
+   e altura = teto de 24cm limitado à folha; o backend aplica o MESMO
+   cálculo (odt_content._dimensoes_cm) mantendo a proporção */
+.preview.odt img {
+  max-width: calc(21cm - 2 * var(--margem-pag));
+  max-height: min(24cm, calc(29.7cm - 2 * var(--margem-pag)));
+}
+
+/* ---------- estrutura do artigo (<!-- toc --> / <!-- numbering -->) ---------- */
+
+/* sumário gerado pelo JS a partir dos títulos */
+.preview .toc {
+  margin: 1em 0;
+  padding: 0;
+  list-style: none;
+}
+.preview .toc li { margin: 0.15em 0; }
+.preview .toc a {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+.preview .toc a.toc-n2 { padding-left: 0.75cm; }
+.preview .toc a.toc-n3 { padding-left: 1.5cm; }
+.preview .toc a.toc-n4 { padding-left: 2.25cm; }
+.preview .toc a.toc-n5 { padding-left: 3cm; }
+.preview .toc a.toc-n6 { padding-left: 3.75cm; }
+.preview .toc a:hover { text-decoration: underline; }
+
+/* parágrafo \newpage → divisor; no modo odt ganha rótulo visível
+   (o .odt exportado em si tem a quebra real, sem marcação) */
+.preview .quebra {
+  border: none;
+  border-top: 1px dashed #aaaaaa;
+  margin: 1em 0;
+}
+.preview.odt .quebra { border-top-color: #666666; }
+.preview.odt .quebra::after {
+  content: "— quebra de página —";
+  display: block;
+  text-align: center;
+  font-size: 9pt;
+  color: #888888;
+  margin-top: 4px;
+}
+
+/* ---------- notas de rodapé (markdown-it-footnote) ---------- */
+
+.preview .footnotes-sep {
+  border: none;
+  border-top: 1px solid #cccccc;
+  margin: 1.5em 0 0.5em;
+}
+
+.preview .footnotes-list {
+  margin: 0;
+  padding-left: 1.6em;
+  font-size: 0.9em;
+  color: #444444;
+}
+
+/* blocos DENTRO da nota: as margens de p/ul/ol (0.25cm no modo odt)
+   escaperiam do <li> sem padding até a raiz e somariam ~9.45px ao pé
+   da página — deslocando o bloco de notas ancorado no fim da folha */
+.preview .footnotes-list p,
+.preview .footnotes-list ul,
+.preview .footnotes-list ol { margin: 0; }
+
+.preview sup.footnote-ref a {
+  text-decoration: none;
+  color: #2f6fed;
+}
+
+.preview .footnote-backref { text-decoration: none; }
+
+/* no modo ODT as notas ficam em 10pt (estilo Footnote do styles.xml);
+   quando cabem numa folha, posicionarNotas() (app.js) ancora o bloco
+   no pé da folha, igual ao .odt real. O margin: 0 aqui é essencial:
+   sem ele, `.preview.odt ol { margin: 0 0 0.25cm }` (especificidade
+   0-2-1 > 0-2-0) vence a regra geral da linha 338 e injeta 0.25cm de
+   margem que "escapa" da <section> e desloca o pé da página em 9.45px */
+.preview.odt .footnotes-list { font-size: var(--nota); margin: 0; }
+.preview.odt sup.footnote-ref a { color: inherit; }
+
+/* ---------- drawers (Estilos / Imagens) ----------
+   Mecânica no interface.js: arrastar pelo .drawer-topo → FLUTUA em
+   qualquer lugar; soltar perto da borda esquerda/direita → FIXA como
+   coluna na lateral. Botão 📌 alterna; posição/estado persistem. */
+
+.drawer {
+  position: fixed;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  max-height: calc(100vh - var(--barra-h) - 16px);
+  background: var(--painel-fundo);
+  color: var(--texto);
+  border: 1px solid var(--painel-borda);
+  border-radius: 12px;
+  box-shadow: var(--sombra);
+  font-size: 13px;
+  overflow: hidden;
+  transition:
+    left var(--transicao), top var(--transicao),
+    right var(--transicao), bottom var(--transicao),
+    opacity var(--transicao), transform var(--transicao);
+}
+
+.drawer[hidden] { display: none; }
+
+/* o display:block dos inputs vence o [hidden] do UA — esconde os
+   auxiliares (ex.: input de importar arquivos) */
+.drawer input[hidden] { display: none; }
+
+/* fixado: coluna na lateral (left/top/right vêm do CSS, não do JS) */
+.drawer[data-estado="fixado"] {
+  top: calc(var(--barra-h) + 8px);
+  right: 8px;
+  bottom: 8px;
+  max-height: none;
+}
+.drawer[data-estado="fixado"][data-lado="esquerda"] {
+  right: auto;
+  left: 8px;
+}
+
+/* flutuante: left/top inline definidos pelo JS */
+.drawer[data-estado="flutuante"] {
+  right: auto;
+  bottom: auto;
+}
+
+/* entrada suave ao abrir (desligada por data-animacoes=off) */
+.drawer.entrando { animation: drawer-entrar 170ms ease; }
+@keyframes drawer-entrar {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+}
+
+.drawer-topo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 10px 9px 14px;
+  background: var(--painel-titulo-fundo);
+  border-bottom: 1px solid var(--painel-borda);
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+
+.drawer-topo strong {
+  flex: 1;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* mini-botões do topo (fixar/fechar) */
+.btn-mini {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--texto-suave);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background var(--transicao), color var(--transicao);
+}
+.btn-mini:hover { background: var(--botao-hover); color: var(--texto); }
+.btn-mini svg { width: 15px; height: 15px; }
+.btn-mini.ativo { color: var(--primario); }
+
+.drawer-corpo {
+  flex: 1;
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.drawer fieldset {
+  margin: 0 0 12px;
+  padding: 10px;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+}
+
+.drawer legend {
+  padding: 0 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--texto-suave);
+}
+
+.drawer label {
+  display: block;
+  margin: 0 0 8px;
+  color: var(--texto);
+}
+
+.drawer input {
+  display: block;
+  width: 100%;
+  margin-top: 3px;
+  padding: 6px 8px;
+  border: 1px solid var(--borda-forte);
+  border-radius: 6px;
+  background: var(--campo-fundo);
+  color: var(--texto);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.drawer input:focus {
+  outline: none;
+  border-color: var(--primario);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primario) 22%, transparent);
+}
+
+.linha-dupla {
+  display: flex;
+  gap: 8px;
+}
+.linha-dupla label { flex: 1; }
+
+.grade-titulos {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.grade-titulos label {
+  margin: 0;
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+.drawer #restaurar-estilos { width: 100%; }
+
+/* faixa de encaixe exibida ao arrastar perto da borda (fixar) */
+.zona-encaixe {
+  position: fixed;
+  top: var(--barra-h);
+  bottom: 0;
+  width: 6px;
+  z-index: 29;
+  background: var(--primario);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.zona-encaixe[data-lado="direita"] { right: 0; }
+.zona-encaixe[data-lado="esquerda"] { left: 0; }
+
+/* ---------- biblioteca de imagens (drawer reutiliza .drawer) ---------- */
+
+.zona-imagens {
+  margin: 8px 0;
+  padding: 12px 8px;
+  border: 1px dashed var(--borda-forte);
+  border-radius: 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+.zona-imagens.arrastando {
+  border-color: var(--primario);
+  color: var(--texto);
+}
+
+.lista-imagens {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item-imagem { position: relative; }
+
+.item-botoeira {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  background: var(--campo-fundo);
+  color: var(--texto);
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color var(--transicao), transform var(--transicao);
+}
+
+.item-botoeira:hover {
+  border-color: var(--primario);
+  transform: translateY(-1px);
+}
+
+.item-botoeira img {
+  display: block;
+  width: 100%;
+  height: 64px;
+  object-fit: cover;
+}
+
+.item-nome {
+  display: block;
+  padding: 3px 2px;
+  font-size: 10px;
+  color: var(--texto-suave);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-excluir {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 11px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.item-excluir:hover { background: #c0392b; }
+
+.biblioteca-vazia {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+/* referência img: quebrada (imagem fora da biblioteca) fica visível */
+.preview img[src^="img:"] {
+  min-height: 16px;
+  min-width: 40px;
+  outline: 1px dashed #c0392b;
+}
+
+/* ---------- modal de Configurações (⚙ no header) ---------- */
+
+.modal-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(10, 14, 22, 0.55);
+  backdrop-filter: blur(3px);
+  animation: fade-entrar 150ms ease;
+}
+.modal-fundo[hidden] { display: none; }
+@keyframes fade-entrar { from { opacity: 0; } }
+
+.modal {
+  width: min(460px, 100%);
+  max-height: min(640px, 90vh);
+  display: flex;
+  flex-direction: column;
+  background: var(--painel-fundo);
+  color: var(--texto);
+  border: 1px solid var(--painel-borda);
+  border-radius: 14px;
+  box-shadow: var(--sombra);
+  overflow: hidden;
+}
+
+.modal-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--painel-borda);
+  background: var(--painel-titulo-fundo);
+}
+
+.modal-corpo {
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.modal fieldset {
+  margin: 0 0 16px;
+  padding: 12px;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+}
+
+.modal legend {
+  padding: 0 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--texto-suave);
+}
+
+.campo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+}
+.campo:last-child { margin-bottom: 0; }
+
+.rotulo { font-size: 13px; }
+
+.dica {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+/* grupo segmentado (tema, fonte do editor) */
+.segmentado {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  background: var(--botao);
+  border-radius: 8px;
+}
+
+.segmentado button {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--texto-suave);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--transicao), color var(--transicao);
+}
+
+.segmentado button:hover { color: var(--texto); }
+
+.segmentado button.ativo {
+  background: var(--campo-fundo);
+  color: var(--texto);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+/* amostras de cor de destaque */
+.amostras {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.amostra {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: var(--c);
+  cursor: pointer;
+  transition: transform var(--transicao), border-color var(--transicao);
+}
+.amostra:hover { transform: scale(1.15); }
+.amostra.ativo {
+  border-color: var(--texto);
+  box-shadow: 0 0 0 2px var(--painel-fundo);
+}
+
+#cfg-cor-custom {
+  width: 30px;
+  height: 24px;
+  padding: 1px;
+  margin: 0;
+  border: 1px solid var(--borda-forte);
+  border-radius: 6px;
+  background: var(--campo-fundo);
+  cursor: pointer;
+}
+
+/* interruptor (animações) */
+.interruptor { display: inline-flex; margin: 0; cursor: pointer; }
+.interruptor input { position: absolute; opacity: 0; pointer-events: none; }
+.interruptor span {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--botao-hover);
+  border: 1px solid var(--borda-forte);
+  transition: background var(--transicao);
+}
+.interruptor span::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--painel-fundo);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform var(--transicao);
+}
+.interruptor input:checked + span {
+  background: var(--primario);
+  border-color: var(--primario);
+}
+.interruptor input:checked + span::after { transform: translateX(16px); }
+
+/* range (tamanho do editor) */
+input[type="range"] {
+  width: 130px;
+  margin: 0;
+  accent-color: var(--primario);
+  cursor: pointer;
+}

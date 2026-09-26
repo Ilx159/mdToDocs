@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Artefatos gerados (conversões de teste)
+*.odt
+*.pdf
+
+# Logs
+*.log
+nohup.out
+
+# Sistema
+.DS_Store

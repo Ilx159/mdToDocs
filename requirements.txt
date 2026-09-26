@@ -1,0 +1,5 @@
+markdown-it-py==4.2.0
+mdit-py-plugins==0.6.1
+fastapi>=0.115
+uvicorn>=0.30
+latex2mathml==3.81.1

@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mdToDocs — Markdown para ODT</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="vendor/texmath.css">
+  <link rel="stylesheet" href="vendor/temml.css">
+
+  <!-- aplica tema/destaque/fonte ANTES do 1º paint (sem flash) —
+       espelha interface.js (mesma chave e mesmos padrões) -->
+  <script>
+    (function () {
+      var FONTES = {
+        mono: '"SF Mono","Fira Code",Consolas,monospace',
+        serif: '"Liberation Serif",Georgia,serif',
+        sans: 'system-ui,-apple-system,"Segoe UI",sans-serif',
+      };
+      var cfg = {};
+      try { cfg = JSON.parse(localStorage.getItem("mdtodocs:config") || "{}"); }
+      catch (e) { /* JSON corrompido → padrões */ }
+      var escuro = cfg.tema === "escuro" ||
+        (cfg.tema !== "claro" &&
+         window.matchMedia("(prefers-color-scheme: dark)").matches);
+      var r = document.documentElement;
+      r.dataset.tema = escuro ? "escuro" : "claro";
+      r.dataset.animacoes = cfg.animacoes === false ? "off" : "on";
+      r.style.setProperty("--primario", cfg.destaque || "#2f6fed");
+      r.style.setProperty("--fonte-editor", FONTES[cfg.fonte] || FONTES.mono);
+      r.style.setProperty(
+        "--tamanho-editor",
+        (Number(cfg.tamanhoEditor) || 14) + "px"
+      );
+    })();
+  </script>
+</head>
+<body>
+  <header class="barra">
+    <div class="marca">mdToDocs</div>
+
+    <input id="filename" class="nome-arquivo" type="text"
+           value="documento" spellcheck="false"
+           title="Nome do arquivo a baixar">
+
+    <div class="acoes">
+      <span id="status" class="status" title="Estado do servidor e salvamento"></span>
+
+      <label class="icone" for="abrir-md" title="Abrir .md">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>
+        </svg>
+      </label>
+      <input id="abrir-md" type="file" accept=".md,.markdown,.txt" hidden>
+
+      <button id="baixar-md" class="icone" type="button" title="Baixar .md">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/>
+        </svg>
+      </button>
+
+      <label class="icone" for="inserir-imagem" title="Inserir imagem no texto">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <path d="M21 15l-5-5L5 21"/>
+        </svg>
+      </label>
+      <input id="inserir-imagem" type="file" accept="image/*" hidden>
+
+      <span class="separador"></span>
+
+      <button id="abrir-imagens" class="icone" type="button"
+              title="Biblioteca de imagens">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <rect x="7" y="3" width="14" height="14" rx="2"/>
+          <path d="M3 7v12a2 2 0 0 0 2 2h12"/>
+          <path d="M21 13l-4-4-6 6"/>
+        </svg>
+      </button>
+
+      <button id="abrir-estilos" class="icone" type="button"
+              title="Estilos do documento">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>
+        </svg>
+      </button>
+
+      <span class="separador"></span>
+
+      <button id="alternar-tema" class="icone" type="button"
+              title="Alternar tema (claro/escuro)">
+        <svg class="ic-sol" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>
+        </svg>
+        <svg class="ic-lua" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+        </svg>
+      </button>
+
+      <button id="abrir-config" class="icone" type="button" title="Configurações">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/>
+          <path d="M1 14h6M9 8h6M17 16h6"/>
+        </svg>
+      </button>
+
+      <button id="exportar-odt" class="botao primario" type="button">
+        Exportar .odt
+      </button>
+    </div>
+  </header>
+
+  <main class="split" id="split">
+    <section class="painel" id="painel-editor">
+      <div class="painel-titulo">Markdown</div>
+      <textarea id="editor" spellcheck="false"
+                placeholder="# Escreva seu artigo aqui..."></textarea>
+    </section>
+
+    <div class="divisor" id="divisor" title="Arraste para redimensionar"></div>
+
+    <section class="painel" id="painel-preview">
+      <div class="painel-titulo">
+        Preview
+        <div class="modo-grupo" role="group" aria-label="Modo do preview">
+          <button type="button" id="modo-web" class="modo ativo">Web</button>
+          <button type="button" id="modo-odt" class="modo">ODT</button>
+        </div>
+      </div>
+      <article id="preview" class="preview"></article>
+    </section>
+  </main>
+
+  <!-- Drawer de estilos: cada input tem data-estilo="chave" igual ao
+       dicionário enviado em POST /api/convert (ver styles.py no backend).
+       Arraste pelo topo para flutuar/soltar; 📌 fixa na lateral. -->
+  <aside id="painel-estilos" class="drawer" hidden
+         aria-label="Estilos do documento">
+    <div class="drawer-topo">
+      <strong>Estilos do documento</strong>
+      <button id="fixar-estilos" class="btn-mini btn-fixar" type="button"
+              title="Fixar na lateral" aria-label="Fixar na lateral">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M12 17v5"/>
+          <path d="M8 3h8l-1.2 6 2.7 2.7V15H6.5v-3.3L9.2 9 8 3z"/>
+        </svg>
+      </button>
+      <button id="fechar-estilos" class="btn-mini btn-fechar" type="button"
+              title="Fechar" aria-label="Fechar painel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="drawer-corpo">
+      <fieldset>
+        <legend>Texto base</legend>
+        <label>Fonte
+          <input id="st-fonte" data-estilo="fonte" type="text"
+                 list="fontes-opcoes" spellcheck="false">
+        </label>
+        <datalist id="fontes-opcoes">
+          <option value="Liberation Serif"></option>
+          <option value="Liberation Sans"></option>
+          <option value="DejaVu Serif"></option>
+          <option value="DejaVu Sans"></option>
+          <option value="Georgia"></option>
+          <option value="Times New Roman"></option>
+          <option value="Arial"></option>
+        </datalist>
+        <div class="linha-dupla">
+          <label>Corpo (pt)
+            <input data-estilo="tamanho" type="number" min="6" max="72" step="1">
+          </label>
+          <label>Entrelinha
+            <input data-estilo="entrelinha" type="number" min="1" max="3" step="0.1">
+          </label>
+        </div>
+        <label>Margem do parágrafo (cm)
+          <input data-estilo="margemParagrafo" type="number"
+                 min="0" max="2" step="0.05">
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Títulos (pt)</legend>
+        <div class="grade-titulos">
+          <label>H1 <input data-estilo="h1" type="number" min="6" max="72" step="1"></label>
+          <label>H2 <input data-estilo="h2" type="number" min="6" max="72" step="1"></label>
+          <label>H3 <input data-estilo="h3" type="number" min="6" max="72" step="1"></label>
+          <label>H4 <input data-estilo="h4" type="number" min="6" max="72" step="1"></label>
+          <label>H5 <input data-estilo="h5" type="number" min="6" max="72" step="1"></label>
+          <label>H6 <input data-estilo="h6" type="number" min="6" max="72" step="1"></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Página A4</legend>
+        <label>Margem das 4 bordas (cm)
+          <input data-estilo="margemPagina" type="number"
+                 min="0.5" max="4" step="0.1">
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Notas de rodapé</legend>
+        <label>Tamanho (pt)
+          <input data-estilo="nota" type="number" min="6" max="24" step="1">
+        </label>
+      </fieldset>
+
+      <button id="restaurar-estilos" class="botao" type="button">
+        Restaurar padrão
+      </button>
+    </div>
+  </aside>
+
+  <!-- Drawer da biblioteca: importa arquivos UMA vez (IndexedDB) e o
+       markdown passa a referenciar por ![alt](img:nome.png) -->
+  <aside id="painel-imagens" class="drawer" hidden
+         aria-label="Biblioteca de imagens">
+    <div class="drawer-topo">
+      <strong>Biblioteca de imagens</strong>
+      <button id="fixar-imagens" class="btn-mini btn-fixar" type="button"
+              title="Fixar na lateral" aria-label="Fixar na lateral">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M12 17v5"/>
+          <path d="M8 3h8l-1.2 6 2.7 2.7V15H6.5v-3.3L9.2 9 8 3z"/>
+        </svg>
+      </button>
+      <button id="fechar-imagens" class="btn-mini btn-fechar" type="button"
+              title="Fechar" aria-label="Fechar painel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="drawer-corpo">
+      <label class="botao" for="importar-imagem">Importar imagens</label>
+      <input id="importar-imagem" type="file" accept="image/*" multiple hidden>
+
+      <div id="zona-imagens" class="zona-imagens">
+        ou arraste os arquivos aqui
+      </div>
+
+      <p id="biblioteca-vazia" class="biblioteca-vazia">
+        Nenhuma imagem importada ainda.
+      </p>
+      <ul id="lista-imagens" class="lista-imagens"></ul>
+    </div>
+  </aside>
+
+  <!-- faixa de encaixe exibida ao arrastar um drawer perto da borda -->
+  <div id="zona-encaixe" class="zona-encaixe" hidden></div>
+
+  <!-- Modal de Configurações (tema, destaque, editor, layout) -->
+  <div id="modal-config" class="modal-fundo" hidden>
+    <div class="modal" role="dialog" aria-modal="true"
+         aria-label="Configurações">
+      <div class="modal-topo">
+        <strong>Configurações</strong>
+        <button id="fechar-config" class="btn-mini" type="button"
+                title="Fechar" aria-label="Fechar configurações">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-corpo">
+        <fieldset>
+          <legend>Aparência</legend>
+
+          <div class="campo">
+            <span class="rotulo">Tema</span>
+            <div class="segmentado" id="cfg-tema" role="group"
+                 aria-label="Tema da interface">
+              <button type="button" data-valor="claro">Claro</button>
+              <button type="button" data-valor="escuro">Escuro</button>
+              <button type="button" data-valor="sistema">Sistema</button>
+            </div>
+          </div>
+
+          <div class="campo">
+            <span class="rotulo">Cor de destaque</span>
+            <div class="amostras" id="cfg-destaque">
+              <button type="button" class="amostra" data-cor="#2f6fed"
+                      style="--c:#2f6fed" title="Azul"></button>
+              <button type="button" class="amostra" data-cor="#16a34a"
+                      style="--c:#16a34a" title="Verde"></button>
+              <button type="button" class="amostra" data-cor="#7c3aed"
+                      style="--c:#7c3aed" title="Roxo"></button>
+              <button type="button" class="amostra" data-cor="#ea580c"
+                      style="--c:#ea580c" title="Laranja"></button>
+              <button type="button" class="amostra" data-cor="#db2777"
+                      style="--c:#db2777" title="Rosa"></button>
+              <button type="button" class="amostra" data-cor="#0891b2"
+                      style="--c:#0891b2" title="Ciano"></button>
+              <input type="color" id="cfg-cor-custom" value="#2f6fed"
+                     title="Cor personalizada">
+            </div>
+          </div>
+
+          <div class="campo">
+            <span class="rotulo">Animações</span>
+            <label class="interruptor" title="Transições suaves na interface">
+              <input type="checkbox" id="cfg-animacoes">
+              <span></span>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Editor</legend>
+
+          <div class="campo">
+            <span class="rotulo">Fonte</span>
+            <div class="segmentado" id="cfg-fonte" role="group"
+                 aria-label="Fonte do editor">
+              <button type="button" data-valor="mono">Mono</button>
+              <button type="button" data-valor="serif">Serifada</button>
+              <button type="button" data-valor="sans">Sem serifa</button>
+            </div>
+          </div>
+
+          <div class="campo">
+            <span class="rotulo">Tamanho:
+              <b id="cfg-tamanho-valor">14px</b>
+            </span>
+            <input type="range" id="cfg-tamanho" min="12" max="20" step="1"
+                   value="14" title="Tamanho da fonte do editor">
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Layout</legend>
+
+          <div class="campo">
+            <button type="button" class="botao" id="cfg-reset-divisoria">
+              Restaurar divisão padrão
+            </button>
+          </div>
+          <p class="dica">
+            Arraste a divisória entre editor e preview — a proporção é
+            lembrada entre sessões.
+          </p>
+        </fieldset>
+      </div>
+    </div>
+  </div>
+
+  <script src="vendor/markdown-it.min.js"></script>
+  <script src="vendor/markdown-it-footnote.min.js"></script>
+  <script src="vendor/temml.min.js"></script>
+  <script src="vendor/texmath.js"></script>
+  <script src="biblioteca.js"></script>
+  <script src="interface.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
