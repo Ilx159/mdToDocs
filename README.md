@@ -65,9 +65,8 @@ Fora do MVP (futuro): múltiplos documentos em abas, sumário navegável, temas 
 Como rodar (na raiz do projeto):
 
 ```bash
-# Docker (recomendado)
-docker compose up --build    # 1ª vez; depois: docker compose up -d
-docker compose logs -f       # acompanhar | docker compose down = parar
+./rodar.sh                   # sobe o container e confirma que responde
+./rodar.sh logs              # acompanhar | ./rodar.sh stop = parar
 # abre http://localhost:8000
 # backend com hot reload (--reload); frontend estático reflete na hora
 
@@ -86,6 +85,7 @@ mdToDocs/
 ├── README.md
 ├── Dockerfile           # imagem do servidor (python:3.13-slim)
 ├── docker-compose.yml   # sobe com mounts + hot reload do backend
+├── rodar.sh             # sobe/para/logs do container em 1 comando
 ├── backend/
 │   ├── main.py          # FastAPI: endpoints de conversão
 │   ├── md_parser.py     # Parsing do Markdown (footnotes, tables, math, estrutura)
