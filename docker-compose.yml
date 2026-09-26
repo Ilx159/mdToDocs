@@ -1,0 +1,24 @@
+# Uso (na raiz do projeto):
+#   docker compose up --build      # primeira vez
+#   docker compose up -d           # depois (detached)
+#   docker compose logs -f         # acompanhar
+#   docker compose down            # parar
+#
+# No modo compose o código fica montado por cima da imagem com
+# --reload: mudança no backend/ reinicia sozinha; frontend é
+# estático e reflete na hora. Para rodar "fechado" (sem mounts):
+#   docker build -t mdtodocs . && docker run -d -p 8000:8000 mdtodocs
+
+services:
+  mdtodocs:
+    build: .
+    image: mdtodocs:dev
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    volumes:
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend
+    command: >
+      uvicorn main:app --app-dir backend
+      --host 0.0.0.0 --port 8000 --reload

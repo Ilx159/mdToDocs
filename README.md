@@ -57,13 +57,22 @@ Fora do MVP (futuro): múltiplos documentos em abas, sumário navegável, temas 
   **fixam** na lateral (soltar perto da borda / botão 📌), e modal de
   Configurações (⚙) com cor de destaque, fonte/tamanho do editor e
   animações
+- **Docker**: `Dockerfile` (python:3.13-slim, usuário sem privilégios,
+  healthcheck) + `docker-compose.yml` com código montado e hot reload do
+  backend
 - Exportação `.odt` via `POST /api/convert` + upload/download de `.md`
 
 Como rodar (na raiz do projeto):
 
 ```bash
-.venv/bin/uvicorn main:app --app-dir backend --port 8000
+# Docker (recomendado)
+docker compose up --build    # 1ª vez; depois: docker compose up -d
+docker compose logs -f       # acompanhar | docker compose down = parar
 # abre http://localhost:8000
+# backend com hot reload (--reload); frontend estático reflete na hora
+
+# sem Docker
+.venv/bin/uvicorn main:app --app-dir backend --port 8000
 ```
 
 Validações: `scripts/verificar.py` (ODT → PDF visual), testes unitários
@@ -75,6 +84,8 @@ ver o preview, exportar e conferir o payload).
 ```
 mdToDocs/
 ├── README.md
+├── Dockerfile           # imagem do servidor (python:3.13-slim)
+├── docker-compose.yml   # sobe com mounts + hot reload do backend
 ├── backend/
 │   ├── main.py          # FastAPI: endpoints de conversão
 │   ├── md_parser.py     # Parsing do Markdown (footnotes, tables, math, estrutura)

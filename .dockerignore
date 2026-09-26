@@ -1,0 +1,8 @@
+# contexto de build enxuto — nada disso entra na imagem
+.venv/
+**/__pycache__/
+*.py[cod]
+.git/
+*.odt
+*.pdf
+*.log
