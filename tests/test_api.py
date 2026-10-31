@@ -28,6 +28,21 @@ check('id="editor"' in html, "editor no index.html")
 st, _, _ = requisitar("GET", "/nao-existe-isto")
 check(st == 404, "arquivo estático inexistente → 404")
 
+# ------------------------------------------------------- cache/versão
+print("\n— cache e versão do frontend —")
+st, hd, _ = requisitar("GET", "/")
+check(hd.get("cache-control") == "no-cache", "HTML servido com no-cache")
+check(re.search(r'styles\.css\?v=[0-9a-f]+', html),
+      "styles.css com ?v= (cache bust por deploy)")
+check(re.search(r'app\.js\?v=[0-9a-f]+', html),
+      "app.js com ?v= (cache bust por deploy)")
+check("app.js?v=" in html and "app.js\"" not in html,
+      "nenhuma referência .js/.css sem versão no index")
+st, hd, _ = requisitar("GET", "/styles.css")
+check(hd.get("cache-control") == "no-cache", ".css servido com no-cache")
+st, hd, _ = requisitar("GET", "/app.js")
+check(hd.get("cache-control") == "no-cache", ".js servido com no-cache")
+
 # -------------------------------------------------------- conversão feliz
 print("\n— conversão feliz —")
 st, hd, corpo = post_convert("# Olá\n\n**forte**", filename="artigo")
