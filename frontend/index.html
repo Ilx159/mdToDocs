@@ -186,8 +186,29 @@
       <div class="painel-titulo">
         Preview
         <div class="painel-titulo-acoes">
+          <button type="button" id="copiar-html" class="modo"
+                  title="Copiar o HTML do markdown para a área de transferência">Copiar HTML</button>
           <button type="button" id="abrir-sumario" class="modo"
                   title="Sumário navegável dos títulos">Sumário</button>
+          <div class="paginas-grupo" id="paginas-grupo" hidden>
+            <button type="button" id="pagina-ant" class="modo"
+                    title="Página anterior" aria-label="Página anterior">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2.5" stroke-linecap="round"
+                   stroke-linejoin="round" aria-hidden="true">
+                <path d="M15 18l-6-6 6-6"/>
+              </svg>
+            </button>
+            <span id="pagina-label" class="pagina-label">Página 1 de 1</span>
+            <button type="button" id="pagina-prox" class="modo"
+                    title="Próxima página" aria-label="Próxima página">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2.5" stroke-linecap="round"
+                   stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 18l6-6-6-6"/>
+              </svg>
+            </button>
+          </div>
           <div class="modo-grupo" role="group" aria-label="Modo do preview">
             <button type="button" id="modo-web" class="modo ativo">Web</button>
             <button type="button" id="modo-odt" class="modo">ODT</button>

@@ -97,11 +97,8 @@ function renderizarPreview() {
   resolverImagensPreview();
   // blocos ```linguagem``` → spans do highlight.js (mesma cor nos 2 temas)
   destacarCodigo();
-  if (modo === "odt") {
-    // imagens são reais nos dois modos (o .odt embute o binário em
-    // Pictures/ — ver backend/odt_content.py); só as notas mudam
-    posicionarNotas();
-  }
+  // modo odt: reparte em folhas A4 e ancora as notas; web: folha única
+  atualizarFolhas();
 }
 
 // ---------- metadados do documento (modal ⚙ → fieldset Documento) ----------
@@ -238,43 +235,373 @@ function estruturaPreview() {
   }
 }
 
-// O navegador não pagina (isso exigiria um motor de paginação), mas
-// quando o conteúdo cabe numa folha só, tiramos o bloco de notas do
-// fluxo e o ancoramos no pé da folha — como o .odt real faz. Usamos
-// posição absoluta (e não margem) porque o Firefox trata a margem do
-// <hr> de forma inconsistente na hora de calcular a altura do
-// container, o que deixaria a medição ~9px errada. Se não couber,
-// as notas fluem logo após o conteúdo (comportamento de antes).
-function posicionarNotas() {
-  const pagina = preview.querySelector(".pagina");
-  const notas = preview.querySelector("section.footnotes");
-  if (!pagina || !notas) return;
+// ---------- paginação A4 (modo ODT) ----------
+// O navegador não tem motor de paginação: distribuímos os nós FILHOS do
+// documento em folhas .pagina medindo a área útil de cada uma. Cada
+// bloco é anexado à folha atual e, se estourar a altura útil, é
+// cortado (parágrafos: por LINHA, via Range) ou deslocado para a
+// próxima folha. \newpage (hr.quebra) e o fim da capa viram quebras
+// forçadas: marcador oculto + folha nova quando a atual tem conteúdo.
 
-  // desfaz um posicionamento anterior (resize/fonts) para medir limpo
+function desfazerNotas() {
+  // desfaz o ancoramento .notas-pe de uma paginação anterior
   const wrapper = preview.querySelector(".notas-pe");
-  if (wrapper) {
-    const pai = wrapper.parentNode;
-    while (wrapper.firstChild) pai.insertBefore(wrapper.firstChild, wrapper);
-    wrapper.remove();
+  if (!wrapper) return;
+  const pai = wrapper.parentNode;
+  while (wrapper.firstChild) pai.insertBefore(wrapper.firstChild, wrapper);
+  wrapper.remove();
+}
+
+function agruparNotas() {
+  // sep + section viram 1 bloco atômico (.grupo-notas) — idempotente
+  if (preview.querySelector(".grupo-notas")) return;
+  const sep = preview.querySelector("hr.footnotes-sep");
+  const notas = preview.querySelector("section.footnotes");
+  if (!notas) return;
+  const ini = sep || notas;
+  const grupo = document.createElement("div");
+  grupo.className = "grupo-notas";
+  ini.parentNode.insertBefore(grupo, ini);
+  if (sep) grupo.appendChild(sep);
+  grupo.appendChild(notas);
+}
+
+function alturaUtilFolha(folha) {
+  // cliente − paddings = área de texto (box-sizing: border-box)
+  const cs = getComputedStyle(folha);
+  return (
+    folha.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
+  );
+}
+
+function alturaConteudo(folha) {
+  // bottom do filho mais baixo (relativo ao topo da área de texto),
+  // incluindo a margem inferior dele — esconde display:none (quebras)
+  const topo =
+    folha.getBoundingClientRect().top +
+    parseFloat(getComputedStyle(folha).paddingTop);
+  let fim = 0;
+  for (const f of folha.children) {
+    if (getComputedStyle(f).display === "none") continue;
+    const r = f.getBoundingClientRect();
+    fim = Math.max(
+      fim,
+      r.bottom - topo + parseFloat(getComputedStyle(f).marginBottom)
+    );
   }
+  return fim;
+}
+
+function sozinho(folha, bloco) {
+  // folha contém SÓ este bloco? (nós invisíveis não contam)
+  for (const f of folha.children) {
+    if (f === bloco) continue;
+    if (getComputedStyle(f).display === "none") continue;
+    return false;
+  }
+  for (const n of folha.childNodes) {
+    if (n.nodeType === 3 && n.textContent.trim()) return false;
+  }
+  return true;
+}
+
+function textoTotal(p) {
+  let total = 0;
+  const w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+  while (w.nextNode()) total += w.currentNode.data.length;
+  return total;
+}
+
+// Range com o início posicionado no offset global `off` (contando só
+// texto, como o caret); fora do texto cai no fim dos filhos de p
+function pontoNo(p, off) {
+  const r = document.createRange();
+  const w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+  let acc = 0;
+  while (w.nextNode()) {
+    const no = w.currentNode;
+    const fim = acc + no.data.length;
+    if (off <= fim) {
+      r.setStart(no, off - acc);
+      return r;
+    }
+    acc = fim;
+  }
+  r.setStart(p, p.childNodes.length);
+  return r;
+}
+
+function rangePrefixo(p, off) {
+  const r = document.createRange();
+  r.setStart(p, 0);
+  const f = pontoNo(p, off);
+  r.setEnd(f.startContainer, f.startOffset);
+  return r;
+}
+
+// Corta o parágrafo na ULTIMA linha que cabe na folha: o que cabe fica,
+// o resto é devolvido pronto p/ ir pra folha nova (null = não cortou).
+// A busca binária acha o maior offset cujo prefixo ainda cabe — como
+// getClientRects de um Range devolve UMA CAIXA POR LINHA, esse limite
+// cai exatamente numa quebra de linha do navegador (nunca dentro duma
+// palavra).
+function dividirParagrafo(folha, p) {
+  if (p.tagName !== "P") return null;
+  const total = textoTotal(p);
+  if (!total) return null;
+
+  const cs = getComputedStyle(folha);
+  const topoConteudo =
+    folha.getBoundingClientRect().top + parseFloat(cs.paddingTop);
+  const yLimite = topoConteudo + alturaUtilFolha(folha);
+  const margemP = parseFloat(getComputedStyle(p).marginBottom) || 0;
+
+  const cabe = (off) => {
+    if (off <= 0) return true;
+    const r = rangePrefixo(p, off);
+    let fim = 0;
+    for (const caixa of r.getClientRects()) fim = Math.max(fim, caixa.bottom);
+    if (!fim) return true; // sem caixa visível (espaço colapsado)
+    return fim + margemP <= yLimite + 0.5;
+  };
+
+  if (cabe(total)) return null; // coube tudo (arredondamento)
+
+  let lo = 1;
+  let hi = total;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (cabe(mid)) lo = mid;
+    else hi = mid - 1;
+  }
+  if (!cabe(lo) || lo >= total) return null; // nem a 1ª linha cabe
+
+  // nunca corta dentro de fórmula (MathML é atômico p/ o editor)
+  const ini = pontoNo(p, lo);
+  if (ini.startContainer.parentElement?.closest("math")) return null;
+
+  // extrai [lo, fim] do parágrafo → novo <p> (divide elementos inline
+  // parciais como <strong> pela metade, como a seleção do navegador)
+  const sobra = document.createRange();
+  sobra.setStart(ini.startContainer, ini.startOffset);
+  sobra.setEnd(p, p.childNodes.length);
+  const conteudo = sobra.extractContents();
+  // <br> ou espaço no fim do que ficou = linha fantasma → remove
+  while (
+    p.lastChild &&
+    (p.lastChild.nodeName === "BR" ||
+      (p.lastChild.nodeType === 3 && !p.lastChild.data.trim()))
+  ) {
+    p.lastChild.remove();
+  }
+  if (!p.childNodes.length || !conteudo.childNodes.length) {
+    p.append(conteudo); // corte sem conteúdo fixo → desiste
+    return null;
+  }
+  const p2 = document.createElement("p");
+  p2.className = p.className;
+  p2.append(conteudo);
+  return p2;
+}
+
+function novaFolha() {
+  const folha = document.createElement("div");
+  folha.className = "pagina";
+  preview.appendChild(folha);
+  return folha;
+}
+
+// bloco já está em `folha` mas estourou a altura útil; devolve a folha
+// que passa a ser a "atual" (a sobra vai para folhas novas)
+function encaixar(folha, bloco) {
+  const resto = dividirParagrafo(folha, bloco);
+  if (resto) {
+    const nova = novaFolha();
+    nova.appendChild(resto);
+    if (alturaConteudo(nova) > alturaUtilFolha(nova)) {
+      return encaixar(nova, resto); // sobra maior que 1 folha → corta de novo
+    }
+    return nova;
+  }
+  if (!sozinho(folha, bloco)) {
+    const nova = novaFolha();
+    nova.appendChild(bloco);
+    if (alturaConteudo(nova) > alturaUtilFolha(nova)) {
+      return encaixar(nova, bloco); // folha nova ainda estoura → corta/cresce
+    }
+    return nova;
+  }
+  return folha; // indivisível e maior que a folha → a folha cresce
+}
+
+function paginarPaginas() {
+  if (modo !== "odt") return;
+  const primeira = preview.querySelector(".pagina");
+  if (!primeira) return;
+
+  // estado limpo e idempotente: tudo numa folha só, notas em fluxo
+  desfazerNotas();
+  agruparNotas();
+  const folhas = [...preview.querySelectorAll(".pagina")];
+  for (let i = 1; i < folhas.length; i++) {
+    while (folhas[i].firstChild) primeira.appendChild(folhas[i].firstChild);
+    folhas[i].remove();
+  }
+
+  // distribui os nós na ordem original (elementos + espaços/comentários)
+  const nos = [...primeira.childNodes];
+  for (const n of nos) n.remove();
+
+  let atual = primeira;
+  let quebraPendente = false;
+
+  for (const no of nos) {
+    if (no.nodeType !== 1) {
+      atual.appendChild(no); // texto/espaço/comentário: 0 altura
+      continue;
+    }
+    const bloco = no;
+
+    // quebra forçada pendente (de \newpage ou da capa) → folha nova,
+    // salvo se a atual ainda estiver vazia (quebra inicial/dupla)
+    if (quebraPendente) {
+      quebraPendente = false;
+      if (alturaConteudo(atual) > 0) atual = novaFolha();
+    }
+
+    // \newpage → marcador oculto (a folha visível É a quebra)
+    if (bloco.tagName === "HR" && bloco.classList.contains("quebra")) {
+      bloco.hidden = true;
+      atual.appendChild(bloco);
+      quebraPendente = true;
+      continue;
+    }
+
+    atual.appendChild(bloco);
+
+    // capa ocupa a folha 1 inteira (o hr.quebra dela é a quebra)
+    if (bloco.classList.contains("capa")) {
+      const q = bloco.querySelector("hr.quebra");
+      if (q) q.hidden = true;
+      quebraPendente = true;
+      continue;
+    }
+
+    if (alturaConteudo(atual) <= alturaUtilFolha(atual)) continue;
+    atual = encaixar(atual, bloco);
+  }
+}
+
+// Ancora as notas no pé da folha onde ficaram (mesma lógica de antes,
+// agora por folha): se o bloco de notas já termina dentro da área
+// útil, tiramos do fluxo e pregamos em position absolute no pé.
+function posicionarNotas() {
+  const grupo = preview.querySelector(".grupo-notas");
+  if (!grupo) return;
+  const pagina = grupo.closest(".pagina");
+  if (!pagina) return;
 
   const cs = getComputedStyle(pagina);
   const padTop = parseFloat(cs.paddingTop);
   const padBottom = parseFloat(cs.paddingBottom);
   const topoUtil = pagina.getBoundingClientRect().top + padTop;
   const alturaUtil = pagina.clientHeight - padTop - padBottom;
-  const fimNotas = notas.getBoundingClientRect().bottom - topoUtil;
-  if (alturaUtil - fimNotas <= 1) return; // não coubeu numa folha
+  const fimNotas = grupo.getBoundingClientRect().bottom - topoUtil;
+  if (alturaUtil - fimNotas <= 1) return; // não coubeu no pé da folha
 
-  // coubeu: régua + notas vão para o pé da folha (.notas-pe no CSS
-  // ancora em position absolute na borda do conteúdo da .pagina)
-  const sep = preview.querySelector("hr.footnotes-sep");
   const bloco = document.createElement("div");
   bloco.className = "notas-pe";
-  (sep || notas).parentNode.insertBefore(bloco, sep || notas);
-  if (sep) bloco.appendChild(sep);
-  bloco.appendChild(notas);
+  grupo.parentNode.insertBefore(bloco, grupo);
+  bloco.appendChild(grupo);
 }
+
+// um só ponto de entrada p/ tudo que mexe no layout do preview em ODT
+function atualizarFolhas() {
+  paginarPaginas(); // web: sai cedo (1 folha só)
+  posicionarNotas();
+  atualizarNavegacao();
+}
+
+// ---------- navegação de páginas (◀ ▶ no topo do preview) ----------
+
+const paginasGrupo = document.getElementById("paginas-grupo");
+const paginaAnt = document.getElementById("pagina-ant");
+const paginaProx = document.getElementById("pagina-prox");
+const paginaLabel = document.getElementById("pagina-label");
+
+let paginaAtual = 1;
+let travadoAte = 0; // ignora o scroll derivado de clique por instantes
+
+function paginaNoTopo() {
+  // página que cruza a linha de referência (topo do preview + 4px)
+  const folhas = [...preview.querySelectorAll(".pagina")];
+  const linha = preview.getBoundingClientRect().top + 4;
+  for (let i = 0; i < folhas.length; i++) {
+    if (folhas[i].getBoundingClientRect().bottom > linha) return i + 1;
+  }
+  return folhas.length || 1;
+}
+
+function atualizarNavegacao() {
+  const total = preview.querySelectorAll(".pagina").length;
+  paginaAtual = Math.min(Math.max(paginaAtual, 1), Math.max(total, 1));
+  paginaLabel.textContent = `Página ${paginaAtual} de ${total}`;
+  paginaAnt.disabled = paginaAtual <= 1;
+  paginaProx.disabled = paginaAtual >= total;
+}
+
+function irParaPagina(n) {
+  const folhas = [...preview.querySelectorAll(".pagina")];
+  if (!folhas.length) return;
+  paginaAtual = Math.min(Math.max(n, 1), folhas.length);
+  atualizarNavegacao(); // indicador responde na hora (sem esperar o scroll)
+  travadoAte = Date.now() + 650; // scroll próprio não pode reverter o clique
+  folhas[paginaAtual - 1].scrollIntoView({
+    block: "start",
+    behavior:
+      document.documentElement.dataset.animacoes === "off" ? "auto" : "smooth",
+  });
+}
+
+paginaAnt.addEventListener("click", () => irParaPagina(paginaAtual - 1));
+paginaProx.addEventListener("click", () => irParaPagina(paginaAtual + 1));
+
+// rolagem manual → qual página está no topo? (throttle + cauda p/ a
+// posição final; a janela travadoAte protege o clique dos botões)
+let tScrollUlt = 0;
+let tScrollCauda = null;
+function sincronizarPaginaDoScroll() {
+  if (modo !== "odt" || Date.now() < travadoAte) return;
+  const n = paginaNoTopo();
+  if (n !== paginaAtual) {
+    paginaAtual = n;
+    atualizarNavegacao();
+  }
+}
+preview.addEventListener(
+  "scroll",
+  () => {
+    clearTimeout(tScrollCauda);
+    const agora = Date.now();
+    if (agora - tScrollUlt > 80) {
+      tScrollUlt = agora;
+      sincronizarPaginaDoScroll();
+    }
+    tScrollCauda = setTimeout(sincronizarPaginaDoScroll, 80);
+  },
+  { passive: true }
+);
+
+// imagem resolvida depois (objectURL da biblioteca) muda a altura da
+// folha → repagina (capture, pois load não borbulha)
+const repaginarDebounced = debounce(atualizarFolhas, 80);
+preview.addEventListener(
+  "load",
+  (e) => {
+    if (modo === "odt" && e.target.tagName === "IMG") repaginarDebounced();
+  },
+  true
+);
 
 // Mede o MathML já renderizado pelo navegador → tamanho real de cada
 // fórmula em cm (a API usa isso no draw:frame; sem isso o backend
@@ -303,6 +630,7 @@ function setModo(novo) {
   preview.classList.toggle("odt", novo === "odt");
   btnModoWeb.classList.toggle("ativo", novo === "web");
   btnModoOdt.classList.toggle("ativo", novo === "odt");
+  paginasGrupo.hidden = novo !== "odt"; // ◀ ▶ só fazem sentido em folhas
   localStorage.setItem(MODO_KEY, novo);
   renderizarPreview();
 }
@@ -422,7 +750,7 @@ painelEstilos.addEventListener("input", (ev) => {
   estilos = normalizarEstilos({ ...estilos, [el.dataset.estilo]: el.value });
   aplicarEstilos();
   salvarEstilos();
-  if (modo === "odt") posicionarNotas(); // margem/tamanho mudam o pé de página
+  atualizarFolhas(); // margem/tamanho mudam a paginação e o pé de página
 });
 
 // ao sair do campo (change): reescreve com o valor já clampado
@@ -448,7 +776,7 @@ document.getElementById("restaurar-estilos").addEventListener("click", () => {
   aplicarEstilos();
   salvarEstilos();
   marcarPreset(presetAtual());
-  if (modo === "odt") posicionarNotas();
+  atualizarFolhas();
 });
 
 // ---------- predefinições de estilos (topo do drawer) ----------
@@ -496,7 +824,7 @@ function aplicarPreset(nome) {
   preencherInputsEstilos();
   aplicarEstilos();
   salvarEstilos();
-  if (modo === "odt") posicionarNotas();
+  atualizarFolhas();
 }
 
 presetGrupo?.addEventListener("click", (e) => {
@@ -584,9 +912,12 @@ function restaurar() {
 abrirInput.addEventListener("change", async () => {
   const arquivo = abrirInput.files[0];
   if (!arquivo) return;
+  pendenteHist();
+  capturarHist();
   editor.value = await arquivo.text();
   filenameInput.value = arquivo.name.replace(/\.(md|markdown|txt)$/i, "");
   filenameManual = true; // nome do arquivo aberto vale como escolha
+  capturarHist(); // Ctrl+Z volta ao documento anterior
   renderizarPreview();
   salvar();
   abrirInput.value = ""; // permite abrir o mesmo arquivo de novo
@@ -608,9 +939,65 @@ function baixarBlob(blob, nome) {
   URL.revokeObjectURL(url);
 }
 
-// ---------- inserir imagem (arquivo local → data URI no markdown) ----------
-// O data URI deixa o .md autossuficiente: o backend embute o binário
-// direto (sem precisar do arquivo no servidor), e o preview mostra já.
+// ---------- copiar HTML (markdown → HTML portátil) ----------
+// Rende o markdown com o MESMO pipeline do preview (tabela, notas,
+// matemática) mas sem os enfeites do app: sem spans do highlight.js
+// (o site destaca do jeito que quiser), sem comentários auxiliares
+// (<!-- toc -->/<!-- numbering -->), \newpage vira <hr> e as imagens
+// da biblioteca são embutidas como data URI (o HTML sai portátil).
+
+function copiarParaAreaDeTransferencia(txt) {
+  // HTTPS/localhost têm navigator.clipboard; contextos antigos caem
+  // para um textarea temporário + execCommand
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(txt);
+  }
+  const t = document.createElement("textarea");
+  t.value = txt;
+  t.style.position = "fixed";
+  t.style.opacity = "0";
+  document.body.appendChild(t);
+  t.select();
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch {
+    ok = false;
+  }
+  t.remove();
+  return ok ? Promise.resolve() : Promise.reject(new Error("cópia recusada"));
+}
+
+async function copiarHTML() {
+  setStatus("copiando HTML...");
+  try {
+    const { texto, faltando } = await resolverImagensMarkdown(editor.value);
+    let html = md.render(texto);
+    html =
+      html
+        .replace(/<p>\s*\\newpage\s*<\/p>/g, "<hr>")
+        .replace(/<!--\s*(toc|numbering)\s*-->/g, "")
+        .trim() + "\n";
+    await copiarParaAreaDeTransferencia(html);
+    setStatus(
+      faltando.length
+        ? `HTML copiado — ${faltando.length} imagem(ns) fora da biblioteca`
+        : `HTML copiado (${html.length} caracteres)`
+    );
+  } catch {
+    setStatus("não deu para copiar o HTML");
+  }
+}
+
+document.getElementById("copiar-html").addEventListener("click", copiarHTML);
+
+// ---------- inserir imagem (arquivo local → biblioteca) ----------
+// O seletor (barra superior e toolbar) guarda os BYTES na biblioteca
+// (IndexedDB) e escreve no markdown só ![alt](img:nome) — o mesmo
+// caminho do Ctrl+V e do arrastar-e-soltar. Um data URI de base64 no
+// meio do texto deixaria o .md gigante e ilegível de editar (e ainda
+// estourava os ~5MB do localStorage). O download do .md continua
+// embutindo os bytes na hora (resolverImagensMarkdown), p/ portabilidade.
 const inserirInput = document.getElementById("inserir-imagem");
 
 // insere trecho no cursor (ou no fim) — usado por arquivo e biblioteca
@@ -628,17 +1015,18 @@ inserirInput.addEventListener("change", async () => {
   inserirInput.value = ""; // permite escolher o mesmo arquivo de novo
   if (!arquivo) return;
 
-  const dataUrl = await new Promise((res, rej) => {
-    const fr = new FileReader();
-    fr.onload = () => res(fr.result);
-    fr.onerror = () => rej(fr.error);
-    fr.readAsDataURL(arquivo);
-  });
-
-  const alt = arquivo.name.replace(/\.[^.]+$/, "");
-  inserirNoEditor(`![${alt}](${dataUrl})`);
+  // nome = identidade do link (Biblioteca salva já sanitizado;
+  // mesmo nome substitui, atualizando todos os links do .md)
+  pendenteHist();
+  capturarHist(); // estado pré-inserção (1 undo desfaz tudo)
+  const nome = await Biblioteca.salvar(arquivo.name, arquivo);
+  const alt = nome.replace(/\.[^.]+$/, "");
+  inserirNoEditor(`![${alt}](img:${nome})`);
+  capturarHist();
+  await carregarListaImagens();
   renderizarPreview();
   salvar();
+  setStatus(`"${nome}" importada na biblioteca`);
 });
 
 // Ctrl+V de imagem: em vez de texto, o arquivo cola DIRETO na
@@ -661,6 +1049,8 @@ editor.addEventListener("paste", async (e) => {
   if (!arquivos.length) return; // texto comum cola normalmente
   e.preventDefault();
 
+  pendenteHist();
+  capturarHist(); // 1 undo desfaz a colagem inteira (várias imagens)
   for (const arquivo of arquivos) {
     const ext = EXTENSOES_MIME[arquivo.type] || "png";
     const nome = `colagem-${Date.now()}-${Math.random()
@@ -670,6 +1060,7 @@ editor.addEventListener("paste", async (e) => {
     const alt = arquivo.name ? arquivo.name.replace(/\.[^.]+$/, "") : "colagem";
     inserirNoEditor(`![${alt}](img:${nome})`);
   }
+  capturarHist();
   await carregarListaImagens(); // gaveta mostra as novas (mesmo fechada)
   renderizarPreview();
   salvar();
@@ -678,6 +1069,95 @@ editor.addEventListener("paste", async (e) => {
       ? "imagem colada na biblioteca"
       : `${arquivos.length} imagens coladas na biblioteca`
   );
+});
+
+// ---------- desfazer / refazer (Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y) ----------
+// O undo NATIVO do textarea some quando o código atribui editor.value
+// (toolbar, colagem, abrir arquivo... invalidam a pilha do navegador).
+// Como o app reescreve o valor direto, mantemos NOSSA pilha de
+// estados {valor, seleção}:
+//   - digitação entra em RAJADAS (debounce de 700ms): 1 Ctrl+Z volta
+//     um bloco digitado, não letra por letra;
+//   - cada edição programática é emoldurada por comHistorico(): o
+//     estado pré/fica na pilha e um único undo desfaz a operação;
+//   - refazer só existe até a próxima edição (cauda cortada).
+const HIST_MAX = 200;
+let pilhaHist = [{ valor: "", ini: 0, fim: 0 }];
+let posHist = 0;
+let tRajada = null;
+
+function snapshotHist() {
+  return {
+    valor: editor.value,
+    ini: editor.selectionStart ?? 0,
+    fim: editor.selectionEnd ?? 0,
+  };
+}
+
+// empilha o estado ATUAL; texto igual ao topo → só atualiza seleção
+function capturarHist() {
+  const e = snapshotHist();
+  const topo = pilhaHist[posHist];
+  if (topo && topo.valor === e.valor) {
+    pilhaHist[posHist] = e;
+    return;
+  }
+  pilhaHist = pilhaHist.slice(0, posHist + 1); // corta o refazer
+  pilhaHist.push(e);
+  posHist = pilhaHist.length - 1;
+  if (pilhaHist.length > HIST_MAX) {
+    pilhaHist.shift();
+    posHist--;
+  }
+}
+
+// rajada pendente vira estado agora (usado antes de desfazer/editar)
+function pendenteHist() {
+  if (tRajada) {
+    clearTimeout(tRajada);
+    tRajada = null;
+    capturarHist();
+  }
+}
+
+function restaurarHist(e) {
+  editor.value = e.valor;
+  editor.selectionStart = e.ini;
+  editor.selectionEnd = e.fim;
+  renderizarPreview();
+  salvar();
+}
+
+function desfazer() {
+  pendenteHist(); // "abc" digitado sem pausa vira 1 estado, e volta
+  if (posHist <= 0) return;
+  posHist--;
+  restaurarHist(pilhaHist[posHist]);
+}
+
+function refazer() {
+  pendenteHist();
+  if (posHist >= pilhaHist.length - 1) return;
+  posHist++;
+  restaurarHist(pilhaHist[posHist]);
+}
+
+// envolve uma edição programática: garante o antes (pendente + topo)
+// e grava o depois — um Ctrl+Z desfaz a operação inteira
+function comHistorico(fn) {
+  pendenteHist();
+  capturarHist();
+  fn();
+  capturarHist();
+}
+
+// digitação: uma rajada de pausa 700ms = 1 estado na pilha
+editor.addEventListener("input", () => {
+  clearTimeout(tRajada);
+  tRajada = setTimeout(() => {
+    tRajada = null;
+    capturarHist();
+  }, 700);
 });
 
 // ---------- toolbar do editor (botões + Ctrl+B / Ctrl+I / Ctrl+E) ----------
@@ -789,7 +1269,7 @@ const FMT = {
 function executarFmt(chave) {
   const fn = FMT[chave];
   if (!fn) return;
-  fn();
+  comHistorico(fn); // toolbar/atalho vira 1 estado no Ctrl+Z
   renderizarPreview();
   salvar();
 }
@@ -800,7 +1280,8 @@ document.querySelector(".toolbar").addEventListener("click", (e) => {
 });
 
 // atalhos no editor: Ctrl+B (negrito), Ctrl+I (itálico),
-// Ctrl+E (código em linha) e Ctrl+S (salvar no navegador)
+// Ctrl+E (código em linha), Ctrl+S (salvar no navegador) e
+// Ctrl+Z / Ctrl+Shift+Z (desfazer/refazer — nossa pilha, ver acima)
 editor.addEventListener("keydown", (e) => {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
   const k = e.key.toLowerCase();
@@ -816,6 +1297,13 @@ editor.addEventListener("keydown", (e) => {
   } else if (k === "s") {
     e.preventDefault();
     salvar();
+  } else if (k === "z") {
+    e.preventDefault(); // senão o undo nativo (quebrado) também roda
+    if (e.shiftKey) refazer();
+    else desfazer();
+  } else if (k === "y") {
+    e.preventDefault();
+    refazer();
   }
 });
 
@@ -891,7 +1379,7 @@ async function carregarListaImagens() {
     botao.append(img, cap);
     botao.addEventListener("click", () => {
       const alt = reg.nome.replace(/\.[^.]+$/, "");
-      inserirNoEditor(`![${alt}](img:${reg.nome})`);
+      comHistorico(() => inserirNoEditor(`![${alt}](img:${reg.nome})`));
       renderizarPreview();
       salvar();
     });
@@ -967,9 +1455,9 @@ const btnSumario = document.getElementById("abrir-sumario");
 const sumarioEl = document.getElementById("sumario");
 
 function montarSumario() {
-  const pagina = preview.querySelector(".pagina");
-  const titulos = [...(pagina?.children || [])].filter((el) =>
-    /^H[1-6]$/.test(el.tagName)
+  // no modo ODT os títulos ficam espalhados pelas folhas → varre todas
+  const titulos = [...preview.querySelectorAll(".pagina")].flatMap((p) =>
+    [...p.children].filter((el) => /^H[1-6]$/.test(el.tagName))
   );
   sumarioEl.innerHTML = "";
   if (!titulos.length) {
@@ -1126,6 +1614,8 @@ async function checarServidor() {
 
 setModo(localStorage.getItem(MODO_KEY) === "odt" ? "odt" : "web");
 restaurar();
+pilhaHist = [snapshotHist()]; // undo volta ao doc restaurado, não ao vazio
+posHist = 0;
 restaurarEstilos();
 preencherInputsEstilos();
 marcarPreset(presetAtual());
@@ -1139,13 +1629,13 @@ checarServidor();
 // a fonte da matemática carrega depois → remede as fórmulas e as notas
 if (document.fonts && document.fonts.ready) {
   document.fonts.ready.then(() => {
-    if (modo === "odt") posicionarNotas();
+    atualizarFolhas();
   });
 }
-// largura da janela muda o layout → recalcula o pé de página
+// largura da janela muda o layout → recalcula a paginação
 window.addEventListener(
   "resize",
   debounce(() => {
-    if (modo === "odt") posicionarNotas();
+    atualizarFolhas();
   }, 200)
 );

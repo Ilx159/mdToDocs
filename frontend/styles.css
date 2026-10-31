@@ -252,6 +252,23 @@ label.icone, label.botao { cursor: pointer; }
   color: #fff;
 }
 
+.modo:disabled { opacity: 0.35; cursor: default; }
+
+/* navegação de páginas ◀ ▶ (só visível no modo ODT) */
+.paginas-grupo {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.paginas-grupo[hidden] { display: none; }
+.paginas-grupo .modo {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+}
+.paginas-grupo .modo svg { width: 11px; height: 11px; display: block; }
+.pagina-label { white-space: nowrap; }
+
 #editor {
   flex: 1;
   padding: 18px;
@@ -390,6 +407,20 @@ label.icone, label.botao { cursor: pointer; }
   right: var(--margem-pag);
   bottom: var(--margem-pag);
 }
+
+/* folhas empilhadas (modo ODT paginado pelo app.js): respiro entre as
+   folhas; scroll-padding deixa a borda superior visível ao navegar */
+.preview.odt .pagina + .pagina { margin-top: 14px; }
+.preview.odt { scroll-padding-top: 10px; }
+
+/* notas agrupadas (sep + section) num bloco atômico p/ a paginação
+   não partir a nota no meio das folhas; flow-root segura a margem do
+   <hr> dentro do wrapper, mantendo a medição de altura fiel */
+.preview.odt .grupo-notas { display: flow-root; }
+
+/* marcador de quebra escondido no modo ODT paginado: o limite da
+   folha em si É a quebra (o rótulo continua no modo web) */
+.preview .quebra[hidden] { display: none; }
 
 /* títulos no ODT herdam a fonte padrão e são 100% bold;
    a entrelinha vem do style:line-height do default-style */
@@ -1169,7 +1200,9 @@ html[data-tema="escuro"] { color-scheme: dark; }
 
 /* ---------- destaque de sintaxe (highlight.js) ----------
    Tokens nossos (não usamos o CSS do pacote) — mesmos nomes de classe
-   .hljs-* que highlightElement aplica, nos dois temas. */
+   .hljs-* que highlightElement aplica. O preview é o DOCUMENTO (papel):
+   fundo claro e paleta clara SEMPRE, mesmo com o app no tema escuro —
+   só a interface (barra/gavetas) acompanha o tema. */
 .preview pre code.hljs { background: transparent; }
 
 .preview .hljs-comment,
@@ -1199,31 +1232,3 @@ html[data-tema="escuro"] { color-scheme: dark; }
 .preview .hljs-deletion { color: #cb2431; }
 .preview .hljs-emphasis { font-style: italic; }
 .preview .hljs-strong { font-weight: bold; }
-
-[data-tema="escuro"] .preview pre { background: #0d1117; border-color: #30363d; }
-[data-tema="escuro"] .preview pre code.hljs { color: #e6edf3; }
-[data-tema="escuro"] .preview .hljs-comment,
-[data-tema="escuro"] .preview .hljs-quote { color: #8b949e; }
-[data-tema="escuro"] .preview .hljs-keyword,
-[data-tema="escuro"] .preview .hljs-selector-tag,
-[data-tema="escuro"] .preview .hljs-built_in,
-[data-tema="escuro"] .preview .hljs-type { color: #ff7b72; }
-[data-tema="escuro"] .preview .hljs-string,
-[data-tema="escuro"] .preview .hljs-regexp,
-[data-tema="escuro"] .preview .hljs-meta .hljs-string { color: #a5d6ff; }
-[data-tema="escuro"] .preview .hljs-number,
-[data-tema="escuro"] .preview .hljs-literal,
-[data-tema="escuro"] .preview .hljs-symbol,
-[data-tema="escuro"] .preview .hljs-bullet { color: #79c0ff; }
-[data-tema="escuro"] .preview .hljs-title,
-[data-tema="escuro"] .preview .hljs-section,
-[data-tema="escuro"] .preview .hljs-name,
-[data-tema="escuro"] .preview .hljs-title.function_ { color: #d2a8ff; }
-[data-tema="escuro"] .preview .hljs-attr,
-[data-tema="escuro"] .preview .hljs-attribute,
-[data-tema="escuro"] .preview .hljs-variable,
-[data-tema="escuro"] .preview .hljs-template-variable { color: #ffa657; }
-[data-tema="escuro"] .preview .hljs-meta,
-[data-tema="escuro"] .preview .hljs-doctag { color: #d29922; }
-[data-tema="escuro"] .preview .hljs-addition { color: #7ee787; }
-[data-tema="escuro"] .preview .hljs-deletion { color: #ff7b72; }

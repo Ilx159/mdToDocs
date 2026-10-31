@@ -3,12 +3,15 @@
 
 Requer o servidor no ar (./rodar.sh) e geckodriver/Firefox no PATH.
 Cobre: carga, editor→preview, modos, drawers, modal, tema, persistência
-(localStorage) e export com filename custom.
+(localStorage), toolbar + atalhos, undo/redo, sumário, slug do H1,
+hljs, importar imagem p/ biblioteca, presets, metadados/capa,
+paginação A4 + navegação de páginas, export e copiar HTML.
 """
 import json
+import tempfile
 import time
 
-from _common import BASE, check, resumo
+from _common import BASE, check, png_bytes, resumo
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -199,7 +202,87 @@ try:
            .find_elements(By.CSS_SELECTOR, "code.hljs .hljs-keyword")),
           "hljs destaca o bloco de código")
 
-    # 14. metadados + página de capa (modal ⚙ → Documento)
+    # 13b. o preview é PAPEL: fundo do código claro até no tema escuro
+    # (só a interface acompanha o tema; regrediu 1x — ver styles.css)
+    tema_ant = d.execute_script("return document.documentElement.dataset.tema")
+    d.execute_script("document.documentElement.dataset.tema = 'escuro'")
+    fundo = d.execute_script("""
+        const pre = document.querySelector('#preview pre');
+        return pre ? getComputedStyle(pre).backgroundColor : '';
+    """)
+    d.execute_script(
+        "document.documentElement.dataset.tema = arguments[0]", tema_ant)
+    check(fundo == "rgb(245, 245, 245)",
+          f"fundo do bloco de código é claro no tema escuro ({fundo})")
+
+    # 14. desfazer/refazer — digitação em rajadas
+    d.execute_script("""
+        const ed = document.getElementById('editor');
+        ed.value = 'base';
+        ed.selectionStart = ed.selectionEnd = 4;
+        ed.dispatchEvent(new Event('input', { bubbles: true }));
+    """)
+    time.sleep(0.9)  # debounce da pilha (700ms)
+    ed = d.find_element(By.ID, "editor")
+    ed.send_keys("abc")
+    time.sleep(0.9)
+    ed.send_keys(Keys.CONTROL, "z")
+    time.sleep(0.3)
+    check(ed.get_attribute("value") == "base",
+          "Ctrl+Z desfaz a rajada digitada")
+    ed.send_keys(Keys.CONTROL, Keys.SHIFT, "z")
+    time.sleep(0.3)
+    check(ed.get_attribute("value") == "baseabc",
+          "Ctrl+Shift+Z refaz a rajada")
+
+    # 15. desfazer de edição programática (toolbar)
+    d.execute_script("""
+        const ed = document.getElementById('editor');
+        ed.value = 'hist';
+        ed.selectionStart = ed.selectionEnd = 4;
+        ed.dispatchEvent(new Event('input', { bubbles: true }));
+    """)
+    time.sleep(0.9)
+    d.find_element(By.CSS_SELECTOR, '[data-fmt="italico"]').click()
+    time.sleep(0.3)
+    check(ed.get_attribute("value") == "hist*texto*",
+          "toolbar itálico envolve o cursor")
+    ed.send_keys(Keys.CONTROL, "z")
+    time.sleep(0.3)
+    check(ed.get_attribute("value") == "hist",
+          "Ctrl+Z desfaz a edição da toolbar")
+    ed.send_keys(Keys.CONTROL, Keys.SHIFT, "z")
+    time.sleep(0.3)
+    check(ed.get_attribute("value") == "hist*texto*",
+          "Ctrl+Shift+Z refaz a edição da toolbar")
+    ed.send_keys(Keys.CONTROL, "z")
+    time.sleep(0.3)
+
+    # 16. seletor de imagem → biblioteca (ref img:, sem base64 no .md)
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+        tmp.write(png_bytes())
+        caminho = tmp.name
+    inp = d.find_element(By.ID, "inserir-imagem")
+    d.execute_script("arguments[0].removeAttribute('hidden')", inp)
+    inp.send_keys(caminho)
+    d.execute_script("arguments[0].setAttribute('hidden', '')", inp)
+    wait.until(lambda _: "(img:" in d.find_element(By.ID, "editor")
+               .get_attribute("value"))
+    val = d.find_element(By.ID, "editor").get_attribute("value")
+    check("(img:" in val and "data:image" not in val,
+          "seletor usa referência img: (sem base64 no markdown)")
+    wait.until(lambda _: "importada" in
+               d.find_element(By.ID, "status").text.lower())
+    check("biblioteca" in d.find_element(By.ID, "status").text.lower(),
+          "status confirma importação na biblioteca")
+    time.sleep(0.6)  # objectURL da biblioteca resolver no preview
+    tem_blob = d.execute_script("""
+        return [...document.querySelectorAll('#preview img')]
+            .some(i => i.src.startsWith('blob:'));
+    """)
+    check(tem_blob, "preview resolve a imagem importada (objectURL)")
+
+    # 17. metadados + página de capa (modal ⚙ → Documento)
     d.find_element(By.ID, "abrir-config").click()
     wait.until(EC.visibility_of_element_located((By.ID, "modal-config")))
     d.find_element(By.ID, "meta-titulo").send_keys("Meu Relatório")
@@ -229,7 +312,7 @@ try:
     check(not d.find_element(By.ID, "modal-config").is_displayed(),
           "Escape fecha o modal após editar metadados")
 
-    # 15. presets de estilos
+    # 18. presets de estilos
     d.find_element(By.ID, "abrir-estilos").click()
     wait.until(EC.visibility_of_element_located((By.ID, "painel-estilos")))
     d.find_element(By.CSS_SELECTOR,
@@ -252,7 +335,7 @@ try:
     d.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
     time.sleep(0.3)
 
-    # 16. nome manual não é sobrescrito pelo slug
+    # 19. nome manual não é sobrescrito pelo slug
     fn = d.find_element(By.ID, "filename")
     fn.clear()
     fn.send_keys("meu-doco")
@@ -266,7 +349,52 @@ try:
           == "meu-doco",
           "nome manual não é sobrescrito pelo slug do H1")
 
-    # 17. export com filename custom + payload com metadados
+    # 20. paginação A4 + navegação ◀ ▶ (só no modo ODT)
+    paras = []
+    for i in range(1, 61):
+        paras.append(
+            f"Parágrafo {i} com um pouco de texto para ocupar espaço na folha.")
+        if i == 30:
+            paras.append("\\newpage")
+    d.execute_script("""
+        const ed = document.getElementById('editor');
+        ed.value = arguments[0];
+        ed.dispatchEvent(new Event('input', { bubbles: true }));
+    """, "# Documento Longo\n\n" + "\n\n".join(paras))
+    d.find_element(By.ID, "modo-odt").click()
+    wait.until(lambda _: len(
+        d.find_elements(By.CSS_SELECTOR, "#preview .pagina")) >= 3)
+    folhas = d.find_elements(By.CSS_SELECTOR, "#preview .pagina")
+    check(len(folhas) >= 3,
+          f"modo ODT reparte o documento em folhas A4 ({len(folhas)})")
+    check("Meu Relatório" in folhas[0].text
+          and "Parágrafo" not in folhas[0].text,
+          "capa ocupa a 1ª folha sozinha")
+    rot = d.find_element(By.ID, "pagina-label").get_attribute("textContent")
+    check(f"1 de {len(folhas)}" in rot,
+          f"indicador mostra a página atual ({rot!r})")
+    check(bool(d.find_elements(By.CSS_SELECTOR, "#preview hr.quebra[hidden]")),
+          "\\newpage vira quebra forçada (marcador oculto)")
+    check(d.find_element(By.ID, "pagina-ant").is_enabled() is False,
+          "'anterior' fica desabilitado na 1ª folha")
+    d.find_element(By.ID, "pagina-prox").click()
+    time.sleep(0.2)
+    rot = d.find_element(By.ID, "pagina-label").get_attribute("textContent")
+    check(f"2 de {len(folhas)}" in rot,
+          f"'próxima' avança o indicador ({rot!r})")
+    d.find_element(By.ID, "pagina-ant").click()
+    time.sleep(0.2)
+    rot = d.find_element(By.ID, "pagina-label").get_attribute("textContent")
+    check(f"1 de {len(folhas)}" in rot,
+          f"'anterior' volta o indicador ({rot!r})")
+    d.find_element(By.ID, "modo-web").click()
+    time.sleep(0.3)
+    check(len(d.find_elements(By.CSS_SELECTOR, "#preview .pagina")) == 1,
+          "modo web volta a folha única")
+    check(not d.find_element(By.ID, "paginas-grupo").is_displayed(),
+          "navegação de páginas some no modo web")
+
+    # 21. export com filename custom + payload com metadados
     d.execute_script("""
         window.__conv = [];
         const orig = window.fetch;
@@ -302,6 +430,49 @@ try:
                d.find_element(By.ID, "status").text.lower())
     check("ODT baixado" in d.find_element(By.ID, "status").text,
           "status mostra 'ODT baixado'")
+
+    # 22. copiar HTML (markdown → HTML portátil na área de transferência)
+    d.execute_script("""
+        window.__copia = [];
+        if (!navigator.clipboard) {
+            Object.defineProperty(navigator, 'clipboard',
+                { configurable: true, value: {} });
+        }
+        Object.defineProperty(navigator.clipboard, 'writeText', {
+            configurable: true,
+            value: async (t) => { window.__copia.push(t); }
+        });
+    """)
+    fence2 = "`" * 3
+    d.execute_script("""
+        const ed = document.getElementById('editor');
+        ed.value = arguments[0];
+        ed.dispatchEvent(new Event('input', { bubbles: true }));
+    """, ("# Título HTML\n\ntexto com **negrito**\n\n"
+          "| a | b |\n|---|---|\n| 1 | 2 |\n\n"
+          f"{fence2}python\nimport os\n{fence2}\n\n"
+          "nota[^n]\n\n[^n]: rodapé de página\n\n"
+          "\\newpage\n\nfim do documento"))
+    d.find_element(By.ID, "copiar-html").click()
+    wait.until(lambda _: d.execute_script("return window.__copia.length") > 0)
+    copiado = d.execute_script("return window.__copia[0]")
+    check("<h1>Título HTML</h1>" in copiado,
+          "HTML copiado tem o título renderizado")
+    check("<strong>negrito</strong>" in copiado,
+          "HTML copiado mantém o negrito")
+    check("<table>" in copiado, "HTML copiado renderiza a tabela")
+    check("<pre><code" in copiado and "hljs" not in copiado,
+          "código vem limpo, sem classes do highlight.js")
+    check("<hr>" in copiado and "\\newpage" not in copiado,
+          "\\newpage vira <hr> no HTML copiado")
+    check("<!--" not in copiado,
+          "comentários auxiliares (toc/numbering) saem do HTML")
+    check('<section class="footnotes">' in copiado,
+          "notas de rodapé viram HTML portátil")
+    wait.until(lambda _: "copiad" in
+               d.find_element(By.ID, "status").text.lower())
+    check("HTML copiado" in d.find_element(By.ID, "status").text,
+          "status confirma a cópia do HTML")
 finally:
     d.quit()
 
