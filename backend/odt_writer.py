@@ -15,9 +15,12 @@ Fluxo completo do projeto:
 """
 
 import zipfile
+from datetime import date
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 from md_parser import Block, parse
+from metadados import data_iso, normalizar as normalizar_meta
 from odt_content import build_content_xml
 from styles import build_styles_xml, normalizar as normalizar_estilos
 
@@ -63,13 +66,29 @@ MANIFEST_XML = """<?xml version="1.0" encoding="UTF-8"?>
 #    (a forma de elemento-filho é descartada).
 STYLES_XML = build_styles_xml()
 
-META_XML = """<?xml version="1.0" encoding="UTF-8"?>
+def build_meta_xml(meta: dict | None = None) -> str:
+    """meta.xml do ZIP: generator sempre; título/autor/data quando há.
+
+    <meta:creation-date> exige xsd:AAAA-MM-DD — usa a data do cliente
+    se for ISO, senão a de hoje (a capa aceita texto livre, o meta.xml
+    não). dc:* precisa do namespace dc declarado no elemento raiz.
+    """
+    m = normalizar_meta(meta)
+    linhas = ["    <meta:generator>mdToDocs</meta:generator>"]
+    if m["titulo"]:
+        linhas.append(f"    <dc:title>{escape(m['titulo'])}</dc:title>")
+    if m["autor"]:
+        linhas.append(f"    <dc:creator>{escape(m['autor'])}</dc:creator>")
+    iso = m["data"] if data_iso(m["data"]) else date.today().isoformat()
+    linhas.append(f"    <meta:creation-date>{iso}</meta:creation-date>")
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
 <office:document-meta
     xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
     xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0"
+    xmlns:dc="http://purl.org/dc/elements/1.1/"
     office:version="1.3">
   <office:meta>
-    <meta:generator>mdToDocs</meta:generator>
+{chr(10).join(linhas)}
   </office:meta>
 </office:document-meta>
 """
@@ -123,6 +142,7 @@ def render_odt(
     math_dims: list[tuple[float, float]] | None = None,
     base_dir: str | Path | None = None,
     estilos: dict | None = None,
+    meta: dict | None = None,
 ) -> bytes:
     """Gera os bytes do .odt a partir da árvore de blocos (em memória).
 
@@ -132,20 +152,22 @@ def render_odt(
     caminho relativo (a API não envia — não tem acesso ao disco).
     `estilos` (opcional) = dict do painel de estilos; normalizado em
     styles.normalizar e aplicado ao styles.xml + à área útil (margens).
+    `meta` (opcional) = {titulo, autor, data, capa} → meta.xml + capa.
     """
     import io
 
     e = normalizar_estilos(estilos)
     styles_xml = build_styles_xml(e)
     content_xml, objetos, imagens = build_content_xml(
-        blocks, math_dims, base_dir=base_dir, estilos=e
+        blocks, math_dims, base_dir=base_dir, estilos=e, meta=meta
     )
     manifest_xml = _manifest_com_partes(objetos, imagens)
+    meta_xml = build_meta_xml(meta)
 
     for name, xml in [
         ("content.xml", content_xml),
         ("styles.xml", styles_xml),
-        ("meta.xml", META_XML),
+        ("meta.xml", meta_xml),
         ("META-INF/manifest.xml", manifest_xml),
         # partes de fórmula: "Object N/content.xml" contém o MathML
         *[(f"{nome}/content.xml", mathml) for nome, mathml in objetos],
@@ -162,7 +184,7 @@ def render_odt(
         )
         odt.writestr("styles.xml", styles_xml, compress_type=zipfile.ZIP_DEFLATED)
         odt.writestr("content.xml", content_xml, compress_type=zipfile.ZIP_DEFLATED)
-        odt.writestr("meta.xml", META_XML, compress_type=zipfile.ZIP_DEFLATED)
+        odt.writestr("meta.xml", meta_xml, compress_type=zipfile.ZIP_DEFLATED)
         odt.writestr(
             "META-INF/manifest.xml",
             manifest_xml,

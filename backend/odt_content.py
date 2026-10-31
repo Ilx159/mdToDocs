@@ -72,6 +72,7 @@ from md_parser import (
     Toc,
 )
 from styles import normalizar as normalizar_estilos
+from metadados import data_brasil, normalizar as normalizar_meta
 
 logger = logging.getLogger(__name__)
 
@@ -775,11 +776,57 @@ def _block_xml(block: Block, paragraph_style: str = "TextBody") -> str:
     return ""
 
 
+# ------------------------------------------------------------------
+# capa (metadados do documento)
+# ------------------------------------------------------------------
+# Estilos da capa no automatic-styles do content.xml: centralizados,
+# com tamanhos fixos (a capa não acompanha o painel de estilos — ela
+# é o "cabeçalho" do arquivo, não o corpo).
+_CAPA_STYLES = """\
+    <style:style style:name="CapaTitulo" style:family="paragraph" style:parent-style-name="TextBody">
+      <style:paragraph-properties fo:text-align="center" fo:margin-top="6cm" fo:margin-bottom="0.8cm"/>
+      <style:text-properties fo:font-size="28pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="CapaAutor" style:family="paragraph" style:parent-style-name="TextBody">
+      <style:paragraph-properties fo:text-align="center" fo:margin-top="0cm" fo:margin-bottom="0.4cm"/>
+      <style:text-properties fo:font-size="14pt"/>
+    </style:style>
+    <style:style style:name="CapaData" style:family="paragraph" style:parent-style-name="TextBody">
+      <style:paragraph-properties fo:text-align="center" fo:margin-top="0cm" fo:margin-bottom="0cm"/>
+      <style:text-properties fo:font-size="12pt" fo:color="#555555"/>
+    </style:style>"""
+
+
+def _capa_xml(meta: dict) -> str:
+    """Página de capa: título/autor/data centralizados + quebra de página.
+
+    `meta` já vem normalizado (metadados.normalizar); a data ISO vira
+    DD/MM/AAAA, texto livre aparece como está. PageBreak reusa o estilo
+    definido no styles.xml (fo:break-before="page").
+    """
+    partes = []
+    if meta["titulo"]:
+        partes.append(
+            f'<text:p text:style-name="CapaTitulo">{_esc(meta["titulo"])}</text:p>'
+        )
+    if meta["autor"]:
+        partes.append(
+            f'<text:p text:style-name="CapaAutor">{_esc(meta["autor"])}</text:p>'
+        )
+    if meta["data"]:
+        partes.append(
+            f'<text:p text:style-name="CapaData">{_esc(data_brasil(meta["data"]))}</text:p>'
+        )
+    partes.append('<text:p text:style-name="PageBreak"/>')
+    return "".join(partes)
+
+
 def build_content_xml(
     blocks: list[Block],
     math_dims: list[tuple[float, float]] | None = None,
     base_dir: str | Path | None = None,
     estilos: dict | None = None,
+    meta: dict | None = None,
 ) -> tuple[str, list[tuple[str, str]], list[tuple[str, bytes, str]]]:
     """Gera (content_xml, objetos, imagens):
     - objetos: partes "Object N" com o MathML das fórmulas;
@@ -796,6 +843,9 @@ def build_content_xml(
 
     `estilos` (opcional) = dict do painel de estilos; só a margem da
     página interessa aqui (muda a área útil de tabela/fórmula/imagem).
+
+    `meta` (opcional) = metadados {titulo, autor, data, capa}; com
+    `capa: true` prepõe a página de capa (estilos Capa*) + quebra.
     """
     global _base_dir, _largura_util, _altura_util
     _reset_auto_styles()
@@ -807,7 +857,11 @@ def build_content_xml(
         _altura_util = min(24.0, 29.7 - 2 * margem)
     if math_dims:
         _dims_fila.extend((float(w), float(h)) for w, h in math_dims[:2000])
-    body = "".join(_block_xml(b) for b in blocks)
+    m = normalizar_meta(meta)
+    corpo = "".join(_block_xml(b) for b in blocks)
+    if m["capa"] and (m["titulo"] or m["autor"] or m["data"]):
+        _auto_styles.append(_CAPA_STYLES)
+        corpo = _capa_xml(m) + corpo
     dynamicos = "".join(_auto_styles)
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
@@ -821,7 +875,7 @@ def build_content_xml(
   </office:automatic-styles>
   <office:body>
     <office:text>
-      {body}
+      {corpo}
     </office:text>
   </office:body>
 </office:document-content>

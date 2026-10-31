@@ -998,3 +998,232 @@ input[type="range"] {
   accent-color: var(--primario);
   cursor: pointer;
 }
+
+/* ---------- toolbar do editor (acima do textarea) ---------- */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  padding: 5px 10px;
+  background: var(--painel-titulo-fundo);
+  border-bottom: 1px solid var(--borda);
+}
+
+.fmt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 24px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--painel-titulo-texto);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--transicao), color var(--transicao);
+}
+.fmt:hover { background: var(--botao-hover); color: var(--texto); }
+.fmt:active { background: var(--botao); }
+.fmt svg { width: 14px; height: 14px; }
+.fmt[data-fmt="codigo"] { font-family: var(--fonte-editor); font-size: 11px; }
+.fmt[data-fmt="italico"] { font-style: italic; }
+
+.toolbar-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--borda-forte);
+}
+
+/* ---------- sumário navegável (card no canto do preview) ---------- */
+
+#painel-preview { position: relative; }
+
+.painel-titulo-acoes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sumario {
+  position: absolute;
+  top: 38px;
+  right: 12px;
+  z-index: 12;
+  min-width: 220px;
+  max-width: 320px;
+  max-height: 70%;
+  overflow-y: auto;
+  padding: 10px 12px;
+  background: var(--painel-fundo);
+  color: var(--texto);
+  border: 1px solid var(--painel-borda);
+  border-radius: 10px;
+  box-shadow: var(--sombra);
+  font-size: 13px;
+}
+.sumario[hidden] { display: none; }
+
+.sumario a {
+  display: block;
+  padding: 3px 6px;
+  border-radius: 6px;
+  color: var(--texto);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sumario a:hover { background: var(--botao-hover); }
+.sumario a.sumario-n2 { padding-left: 18px; }
+.sumario a.sumario-n3 { padding-left: 30px; }
+.sumario a.sumario-n4 { padding-left: 42px; }
+.sumario a.sumario-n5 { padding-left: 54px; }
+.sumario a.sumario-n6 { padding-left: 66px; }
+
+.sumario-vazio {
+  margin: 0;
+  color: var(--texto-suave);
+  font-size: 12px;
+}
+
+/* ---------- predefinições no drawer de estilos ---------- */
+
+.bloco-preset {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+.bloco-preset .rotulo {
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+.bloco-preset .segmentado { flex-wrap: wrap; }
+
+/* ---------- metadados no modal de Configurações ---------- */
+
+.campo.coluna {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+}
+
+.modal .campo input[type="text"],
+.modal .campo input[type="date"] {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--borda-forte);
+  border-radius: 6px;
+  background: var(--campo-fundo);
+  color: var(--texto);
+  font-size: 13px;
+  font-family: inherit;
+}
+.modal .campo input[type="text"]:focus,
+.modal .campo input[type="date"]:focus {
+  outline: none;
+  border-color: var(--primario);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primario) 22%, transparent);
+}
+
+/* date picker acompanha o tema */
+html { color-scheme: light; }
+html[data-tema="escuro"] { color-scheme: dark; }
+
+/* ---------- página de capa no preview ----------
+   Espelha _CAPA_STYLES do odt_content.py: no modo ODT os tamanhos são
+   FIXOS (28/14/12pt) e o título respira 6cm do topo; no modo web o
+   bloco é um banner centralizado acima do texto. */
+.capa {
+  text-align: center;
+  margin: 0 0 1.5em;
+  padding: 3em 0 0;
+}
+.capa .quebra { margin-top: 2.5em; }
+
+.capa-titulo {
+  font-family: system-ui, sans-serif;
+  font-size: 2em;
+  font-weight: 700;
+  line-height: 1.25;
+  margin-bottom: 0.4em;
+}
+.capa-autor { font-size: 1.1em; margin-bottom: 0.3em; }
+.capa-data { font-size: 0.95em; color: #555; }
+
+.preview.odt .capa { padding: 6cm 0 0; margin: 0; }
+.preview.odt .capa-titulo {
+  font-size: 28pt;
+  margin-bottom: 0.8cm;
+}
+.preview.odt .capa-autor { font-size: 14pt; margin-bottom: 0.4cm; }
+.preview.odt .capa-data { font-size: 12pt; color: #555; }
+.preview.odt .capa .quebra { margin-top: 4cm; }
+
+/* ---------- destaque de sintaxe (highlight.js) ----------
+   Tokens nossos (não usamos o CSS do pacote) — mesmos nomes de classe
+   .hljs-* que highlightElement aplica, nos dois temas. */
+.preview pre code.hljs { background: transparent; }
+
+.preview .hljs-comment,
+.preview .hljs-quote { color: #6a737d; font-style: italic; }
+.preview .hljs-keyword,
+.preview .hljs-selector-tag,
+.preview .hljs-built_in,
+.preview .hljs-type { color: #d73a49; }
+.preview .hljs-string,
+.preview .hljs-regexp,
+.preview .hljs-meta .hljs-string { color: #032f62; }
+.preview .hljs-number,
+.preview .hljs-literal,
+.preview .hljs-symbol,
+.preview .hljs-bullet { color: #005cc5; }
+.preview .hljs-title,
+.preview .hljs-section,
+.preview .hljs-name,
+.preview .hljs-title.function_ { color: #6f42c1; }
+.preview .hljs-attr,
+.preview .hljs-attribute,
+.preview .hljs-variable,
+.preview .hljs-template-variable { color: #e36209; }
+.preview .hljs-meta,
+.preview .hljs-doctag { color: #735c0f; }
+.preview .hljs-addition { color: #22863a; }
+.preview .hljs-deletion { color: #cb2431; }
+.preview .hljs-emphasis { font-style: italic; }
+.preview .hljs-strong { font-weight: bold; }
+
+[data-tema="escuro"] .preview pre { background: #0d1117; border-color: #30363d; }
+[data-tema="escuro"] .preview pre code.hljs { color: #e6edf3; }
+[data-tema="escuro"] .preview .hljs-comment,
+[data-tema="escuro"] .preview .hljs-quote { color: #8b949e; }
+[data-tema="escuro"] .preview .hljs-keyword,
+[data-tema="escuro"] .preview .hljs-selector-tag,
+[data-tema="escuro"] .preview .hljs-built_in,
+[data-tema="escuro"] .preview .hljs-type { color: #ff7b72; }
+[data-tema="escuro"] .preview .hljs-string,
+[data-tema="escuro"] .preview .hljs-regexp,
+[data-tema="escuro"] .preview .hljs-meta .hljs-string { color: #a5d6ff; }
+[data-tema="escuro"] .preview .hljs-number,
+[data-tema="escuro"] .preview .hljs-literal,
+[data-tema="escuro"] .preview .hljs-symbol,
+[data-tema="escuro"] .preview .hljs-bullet { color: #79c0ff; }
+[data-tema="escuro"] .preview .hljs-title,
+[data-tema="escuro"] .preview .hljs-section,
+[data-tema="escuro"] .preview .hljs-name,
+[data-tema="escuro"] .preview .hljs-title.function_ { color: #d2a8ff; }
+[data-tema="escuro"] .preview .hljs-attr,
+[data-tema="escuro"] .preview .hljs-attribute,
+[data-tema="escuro"] .preview .hljs-variable,
+[data-tema="escuro"] .preview .hljs-template-variable { color: #ffa657; }
+[data-tema="escuro"] .preview .hljs-meta,
+[data-tema="escuro"] .preview .hljs-doctag { color: #d29922; }
+[data-tema="escuro"] .preview .hljs-addition { color: #7ee787; }
+[data-tema="escuro"] .preview .hljs-deletion { color: #ff7b72; }

@@ -90,15 +90,85 @@ function setStatus(texto) {
 // ---------- live preview (renderiza enquanto digita) ----------
 
 function renderizarPreview() {
-  preview.innerHTML = `<div class="pagina">${md.render(editor.value)}</div>`;
+  preview.innerHTML =
+    `<div class="pagina">${capaPreview()}${md.render(editor.value)}</div>`;
   estruturaPreview();
   // ![alt](img:nome) → objectURL da biblioteca (IndexedDB)
   resolverImagensPreview();
+  // blocos ```linguagem``` → spans do highlight.js (mesma cor nos 2 temas)
+  destacarCodigo();
   if (modo === "odt") {
     // imagens são reais nos dois modos (o .odt embute o binário em
     // Pictures/ — ver backend/odt_content.py); só as notas mudam
     posicionarNotas();
   }
+}
+
+// ---------- metadados do documento (modal ⚙ → fieldset Documento) ----------
+// Espelha backend/metadados.py: mesmos limites (200/120/60), mesmos
+// caracteres de controle removidos e `capa` só quando booleano true.
+const META_KEY = "mdtodocs:metadados";
+const META_LIMITES = { titulo: 200, autor: 120, data: 60 };
+
+let meta = { titulo: "", autor: "", data: "", capa: false };
+
+function normalizarMeta(bruto) {
+  const m = { titulo: "", autor: "", data: "", capa: false };
+  if (bruto && typeof bruto === "object") {
+    for (const [campo, teto] of Object.entries(META_LIMITES)) {
+      if (typeof bruto[campo] === "string") {
+        m[campo] = bruto[campo]
+          .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "")
+          .trim()
+          .slice(0, teto);
+      }
+    }
+    m.capa = bruto.capa === true;
+  }
+  return m;
+}
+
+function escaparHTML(txt) {
+  return txt.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function dataBrasil(iso) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso)
+    ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
+    : iso;
+}
+
+// página de capa no preview — mesmos estilos fixos do .odt
+// (CapaTitulo 28pt / CapaAutor 14pt / CapaData 12pt, ver odt_content.py);
+// o hr.quebra é o mesmo divisor do \newpage (web tracejado, odt rotulado).
+function capaPreview() {
+  if (!meta.capa || !(meta.titulo || meta.autor || meta.data)) return "";
+  const partes = [];
+  if (meta.titulo) {
+    partes.push(`<div class="capa-titulo">${escaparHTML(meta.titulo)}</div>`);
+  }
+  if (meta.autor) {
+    partes.push(`<div class="capa-autor">${escaparHTML(meta.autor)}</div>`);
+  }
+  if (meta.data) {
+    partes.push(`<div class="capa-data">${escaparHTML(dataBrasil(meta.data))}</div>`);
+  }
+  return `<div class="capa">${partes.join("")}<hr class="quebra"></div>`;
+}
+
+// destaca blocos de código (highlight.js carregado em vendor/).
+// highlightElement marca spans .hljs-*; sem linguagem declarada ele usa
+// o auto-detection do pacote (só roda nos <pre><code> do preview).
+function destacarCodigo() {
+  if (!window.hljs) return;
+  preview.querySelectorAll("pre code").forEach((bloco) => {
+    bloco.classList.add("hljs");
+    try {
+      window.hljs.highlightElement(bloco);
+    } catch {
+      // linguagem desconhecida → texto ficou como estava
+    }
+  });
 }
 
 // ---------- estrutura do artigo: numeração, sumário, quebras ----------
@@ -357,7 +427,10 @@ painelEstilos.addEventListener("input", (ev) => {
 
 // ao sair do campo (change): reescreve com o valor já clampado
 // (ex.: digitou 999 → volta mostrando 72)
-painelEstilos.addEventListener("change", preencherInputsEstilos);
+painelEstilos.addEventListener("change", () => {
+  preencherInputsEstilos();
+  marcarPreset(presetAtual()); // ajuste manual pode desligar o preset
+});
 
 document.getElementById("abrir-estilos").addEventListener("click", () => {
   // Interface (interface.js) fecha os demais drawers e aplica a
@@ -374,10 +447,69 @@ document.getElementById("restaurar-estilos").addEventListener("click", () => {
   preencherInputsEstilos();
   aplicarEstilos();
   salvarEstilos();
+  marcarPreset(presetAtual());
   if (modo === "odt") posicionarNotas();
 });
 
+// ---------- predefinições de estilos (topo do drawer) ----------
+// Conjuntos prontos com as MESMAS chaves do painel — aplicar um preset
+// só reescreve o dicionário local; o export usa normalizar() do backend
+// como sempre (limites idênticos dos dois lados).
+const PRESETS = {
+  padrao: ESTILOS_PADRAO,
+  academico: {
+    fonte: "Liberation Serif", tamanho: 12, entrelinha: 1.5,
+    margemParagrafo: 0.5, margemPagina: 3,
+    h1: 24, h2: 18, h3: 15, h4: 13, h5: 12, h6: 12, nota: 10,
+  },
+  relatorio: {
+    fonte: "Liberation Sans", tamanho: 11, entrelinha: 1.15,
+    margemParagrafo: 0.2, margemPagina: 2,
+    h1: 26, h2: 20, h3: 16, h4: 14, h5: 13, h6: 12, nota: 9,
+  },
+  compacto: {
+    fonte: "Liberation Serif", tamanho: 11, entrelinha: 1,
+    margemParagrafo: 0.1, margemPagina: 1.5,
+    h1: 20, h2: 16, h3: 14, h4: 13, h5: 12, h6: 11, nota: 9,
+  },
+};
+
+const presetGrupo = document.getElementById("preset-estilos");
+
+function marcarPreset(nome) {
+  presetGrupo?.querySelectorAll("button").forEach((b) => {
+    b.classList.toggle("ativo", b.dataset.valor === nome);
+  });
+}
+
+// qual preset corresponde aos estilos atuais (null = personalizado)
+function presetAtual() {
+  for (const [nome, p] of Object.entries(PRESETS)) {
+    if (Object.keys(p).every((k) => estilos[k] === p[k])) return nome;
+  }
+  return null;
+}
+
+function aplicarPreset(nome) {
+  estilos = normalizarEstilos({ ...PRESETS[nome] });
+  marcarPreset(nome);
+  preencherInputsEstilos();
+  aplicarEstilos();
+  salvarEstilos();
+  if (modo === "odt") posicionarNotas();
+}
+
+presetGrupo?.addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-valor]");
+  if (!b || !Object.hasOwn(PRESETS, b.dataset.valor)) return;
+  aplicarPreset(b.dataset.valor);
+});
+
 // ---------- persistência no navegador (localStorage) ----------
+
+// filenameManual: true quando o usuário digitou o nome na mão — aí o
+// slug do H1 não sobrescreve mais (persistido junto do documento)
+let filenameManual = false;
 
 function salvar() {
   const hora = new Date().toLocaleTimeString("pt-BR", {
@@ -387,7 +519,11 @@ function salvar() {
   try {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ markdown: editor.value, filename: filenameInput.value })
+      JSON.stringify({
+        markdown: editor.value,
+        filename: filenameInput.value,
+        filenameManual,
+      })
     );
     setStatus(`salvo ${hora}`);
   } catch {
@@ -398,7 +534,34 @@ function salvar() {
 
 const salvarDebounced = debounce(salvar, 400);
 editor.addEventListener("input", salvarDebounced);
-filenameInput.addEventListener("input", salvarDebounced);
+filenameInput.addEventListener("input", () => {
+  filenameManual = true;
+  salvarDebounced();
+});
+
+// slug do H1 → nome do arquivo (a-f, 0-9 e hífen; acentos caem fora
+// via NFD — mesma ideia do nomeSeguro do backend, mas legível)
+function slugificar(txt) {
+  return txt
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+function sugerirNomeDoH1() {
+  if (filenameManual) return;
+  const m = editor.value.match(/^#\s+(.+)$/m);
+  if (!m) return;
+  const slug = slugificar(m[1].replace(/[*_`]/g, ""));
+  if (slug && slug !== filenameInput.value) {
+    filenameInput.value = slug;
+    salvarDebounced();
+  }
+}
+editor.addEventListener("input", sugerirNomeDoH1);
 
 function restaurar() {
   const bruto = localStorage.getItem(STORAGE_KEY);
@@ -407,6 +570,7 @@ function restaurar() {
       const dados = JSON.parse(bruto);
       editor.value = dados.markdown ?? "";
       filenameInput.value = dados.filename ?? "documento";
+      filenameManual = dados.filenameManual === true;
       return;
     } catch {
       // JSON corrompido — cai no exemplo abaixo
@@ -422,6 +586,7 @@ abrirInput.addEventListener("change", async () => {
   if (!arquivo) return;
   editor.value = await arquivo.text();
   filenameInput.value = arquivo.name.replace(/\.(md|markdown|txt)$/i, "");
+  filenameManual = true; // nome do arquivo aberto vale como escolha
   renderizarPreview();
   salvar();
   abrirInput.value = ""; // permite abrir o mesmo arquivo de novo
@@ -474,6 +639,184 @@ inserirInput.addEventListener("change", async () => {
   inserirNoEditor(`![${alt}](${dataUrl})`);
   renderizarPreview();
   salvar();
+});
+
+// Ctrl+V de imagem: em vez de texto, o arquivo cola DIRETO na
+// biblioteca (IndexedDB) e vira referência ![...](img:nome) — o .md
+// continua leve (só o nome) e o export resolve nome → bytes.
+const EXTENSOES_MIME = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/svg+xml": "svg",
+  "image/bmp": "bmp",
+};
+
+editor.addEventListener("paste", async (e) => {
+  const arquivos = [...(e.clipboardData?.items || [])]
+    .filter((i) => i.kind === "file" && i.type.startsWith("image/"))
+    .map((i) => i.getAsFile())
+    .filter(Boolean);
+  if (!arquivos.length) return; // texto comum cola normalmente
+  e.preventDefault();
+
+  for (const arquivo of arquivos) {
+    const ext = EXTENSOES_MIME[arquivo.type] || "png";
+    const nome = `colagem-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 7)}.${ext}`;
+    await Biblioteca.salvar(nome, arquivo);
+    const alt = arquivo.name ? arquivo.name.replace(/\.[^.]+$/, "") : "colagem";
+    inserirNoEditor(`![${alt}](img:${nome})`);
+  }
+  await carregarListaImagens(); // gaveta mostra as novas (mesmo fechada)
+  renderizarPreview();
+  salvar();
+  setStatus(
+    arquivos.length === 1
+      ? "imagem colada na biblioteca"
+      : `${arquivos.length} imagens coladas na biblioteca`
+  );
+});
+
+// ---------- toolbar do editor (botões + Ctrl+B / Ctrl+I / Ctrl+E) ----------
+
+// envolve a seleção (ou "texto") com o marcador dos dois lados
+function envolver(marcador) {
+  const ini = editor.selectionStart ?? editor.value.length;
+  const fim = editor.selectionEnd ?? ini;
+  const sel = editor.value.slice(ini, fim) || "texto";
+  const novo = marcador + sel + marcador;
+  editor.value = editor.value.slice(0, ini) + novo + editor.value.slice(fim);
+  editor.selectionStart = ini + marcador.length;
+  editor.selectionEnd = ini + marcador.length + sel.length;
+  editor.focus();
+}
+
+// prefixa (ou remove) o marcador em todas as linhas da seleção
+function prefixarLinhas(pre) {
+  const ini = editor.selectionStart ?? 0;
+  const fim = editor.selectionEnd ?? ini;
+  const linhaIni = editor.value.lastIndexOf("\n", ini - 1) + 1;
+  let linhaFim = editor.value.indexOf("\n", fim);
+  if (linhaFim === -1) linhaFim = editor.value.length;
+
+  const trecho = editor.value.slice(linhaIni, linhaFim);
+  const linhas = trecho.split("\n");
+  const naoVazias = linhas.filter((l) => l.trim());
+  const jaTem =
+    naoVazias.length > 0 && naoVazias.every((l) => l.startsWith(pre));
+  const novo = linhas
+    .map((l) => (jaTem ? l.slice(pre.length) : l ? pre + l : l))
+    .join("\n");
+
+  editor.value =
+    editor.value.slice(0, linhaIni) + novo + editor.value.slice(linhaFim);
+  const delta = novo.length - trecho.length;
+  const desloc = jaTem ? -pre.length : pre.length;
+  editor.selectionStart = Math.max(linhaIni, Math.min(ini + desloc, linhaIni + novo.length));
+  editor.selectionEnd = Math.max(editor.selectionStart, Math.min(fim + delta, linhaIni + novo.length));
+  editor.focus();
+}
+
+// lista numerada: 1., 2., 3... (toggle: todas já numeradas → remove)
+function numerarLinhas() {
+  const ini = editor.selectionStart ?? 0;
+  const fim = editor.selectionEnd ?? ini;
+  const linhaIni = editor.value.lastIndexOf("\n", ini - 1) + 1;
+  let linhaFim = editor.value.indexOf("\n", fim);
+  if (linhaFim === -1) linhaFim = editor.value.length;
+
+  const trecho = editor.value.slice(linhaIni, linhaFim);
+  const linhas = trecho.split("\n");
+  const naoVazias = linhas.filter((l) => l.trim());
+  const jaTem =
+    naoVazias.length > 0 && naoVazias.every((l) => /^\d+\.\s/.test(l));
+  const novo = naoVazias.length
+    ? linhas
+        .map((l, i) => {
+          if (!l.trim()) return l;
+          if (jaTem) return l.replace(/^\d+\.\s/, "");
+          return l.replace(/^\d+\.\s/, "").replace(/^/, `${i + 1}. `);
+        })
+        .join("\n")
+    : trecho;
+
+  editor.value =
+    editor.value.slice(0, linhaIni) + novo + editor.value.slice(linhaFim);
+  const delta = novo.length - trecho.length;
+  editor.selectionStart = Math.max(
+    linhaIni,
+    Math.min(ini + (jaTem ? -3 : 3), linhaIni + novo.length)
+  );
+  editor.selectionEnd = Math.max(
+    editor.selectionStart,
+    Math.min(fim + delta, linhaIni + novo.length)
+  );
+  editor.focus();
+}
+
+// link: seleciona a URL para o usuário digitar por cima
+function inserirLink() {
+  const ini = editor.selectionStart ?? editor.value.length;
+  const fim = editor.selectionEnd ?? ini;
+  const sel = editor.value.slice(ini, fim) || "link";
+  const novo = `[${sel}](https://)`;
+  editor.value = editor.value.slice(0, ini) + novo + editor.value.slice(fim);
+  const urlIni = ini + sel.length + 4; // "[" + sel + "]("
+  editor.selectionStart = urlIni;
+  editor.selectionEnd = urlIni + 8; // "https://"
+  editor.focus();
+}
+
+const FMT = {
+  negrito: () => envolver("**"),
+  italico: () => envolver("*"),
+  codigo: () => envolver("`"),
+  titulo: () => prefixarLinhas("## "),
+  lista: () => prefixarLinhas("- "),
+  listaNum: numerarLinhas,
+  citacao: () => prefixarLinhas("> "),
+  link: inserirLink,
+  tabela: () =>
+    inserirNoEditor(
+      "\n| Coluna | Coluna |\n|--------|--------|\n| celula | celula |\n"
+    ),
+  imagem: () => inserirInput.click(),
+};
+
+function executarFmt(chave) {
+  const fn = FMT[chave];
+  if (!fn) return;
+  fn();
+  renderizarPreview();
+  salvar();
+}
+
+document.querySelector(".toolbar").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-fmt]");
+  if (b) executarFmt(b.dataset.fmt);
+});
+
+// atalhos no editor: Ctrl+B (negrito), Ctrl+I (itálico),
+// Ctrl+E (código em linha) e Ctrl+S (salvar no navegador)
+editor.addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === "b") {
+    e.preventDefault();
+    executarFmt("negrito");
+  } else if (k === "i") {
+    e.preventDefault();
+    executarFmt("italico");
+  } else if (k === "e") {
+    e.preventDefault();
+    executarFmt("codigo");
+  } else if (k === "s") {
+    e.preventDefault();
+    salvar();
+  }
 });
 
 // ---------- biblioteca de imagens (IndexedDB) ----------
@@ -616,6 +959,110 @@ document.getElementById("abrir-imagens").addEventListener("click", () => {
   });
 });
 
+// ---------- sumário navegável (botão no topo do preview) ----------
+// Lista os títulos DIRETOS do .pagina (mesmos sec_N do <!-- toc -->)
+// num card flutuante; clicar rola até o título e fecha o card.
+
+const btnSumario = document.getElementById("abrir-sumario");
+const sumarioEl = document.getElementById("sumario");
+
+function montarSumario() {
+  const pagina = preview.querySelector(".pagina");
+  const titulos = [...(pagina?.children || [])].filter((el) =>
+    /^H[1-6]$/.test(el.tagName)
+  );
+  sumarioEl.innerHTML = "";
+  if (!titulos.length) {
+    const vazio = document.createElement("p");
+    vazio.className = "sumario-vazio";
+    vazio.textContent = "Nenhum título no documento.";
+    sumarioEl.appendChild(vazio);
+    return;
+  }
+  for (const h of titulos) {
+    const a = document.createElement("a");
+    a.href = `#${h.id}`;
+    a.className = `sumario-n${h.tagName[1]}`;
+    a.textContent = h.textContent;
+    a.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      h.scrollIntoView({ block: "start", behavior: "smooth" });
+      fecharSumario();
+    });
+    sumarioEl.appendChild(a);
+  }
+}
+
+function fecharSumario() {
+  sumarioEl.hidden = true;
+  btnSumario.classList.remove("ativo");
+}
+
+btnSumario.addEventListener("click", () => {
+  const abrir = sumarioEl.hidden;
+  if (abrir) montarSumario();
+  sumarioEl.hidden = !abrir;
+  btnSumario.classList.toggle("ativo", abrir);
+});
+
+// clique fora fecha; Escape também (mesmo ato dos drawers/modais)
+document.addEventListener("click", (e) => {
+  if (sumarioEl.hidden) return;
+  if (e.target.closest("#sumario, #abrir-sumario")) return;
+  fecharSumario();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") fecharSumario();
+});
+
+// ---------- campos de metadados no modal de Configurações ----------
+
+const metaInputs = {
+  titulo: document.getElementById("meta-titulo"),
+  autor: document.getElementById("meta-autor"),
+  data: document.getElementById("meta-data"),
+  capa: document.getElementById("meta-capa"),
+};
+
+function salvarMeta() {
+  try {
+    localStorage.setItem(META_KEY, JSON.stringify(meta));
+  } catch {
+    // sem espaço: metadados valem só nesta sessão
+  }
+}
+
+function restaurarMeta() {
+  try {
+    meta = normalizarMeta(JSON.parse(localStorage.getItem(META_KEY) || "null"));
+  } catch {
+    meta = normalizarMeta(null);
+  }
+}
+
+function preencherInputsMeta() {
+  metaInputs.titulo.value = meta.titulo;
+  metaInputs.autor.value = meta.autor;
+  // input[type=date] só aceita AAAA-MM-DD; texto livre fica de fora
+  // aqui (no .odt ele aparece na capa como está — ver metadados.py)
+  metaInputs.data.value = /^\d{4}-\d{2}-\d{2}$/.test(meta.data) ? meta.data : "";
+  metaInputs.capa.checked = meta.capa;
+}
+
+for (const [campo, el] of Object.entries(metaInputs)) {
+  const evento = el.type === "checkbox" ? "change" : "input";
+  el.addEventListener(evento, () => {
+    // normaliza só o ESTADO (trim/aparos); o input mantém o texto cru
+    // — reescrever el.value aqui apagaria o espaço enquanto se digita
+    meta = normalizarMeta({
+      ...meta,
+      [campo]: el.type === "checkbox" ? el.checked : el.value,
+    });
+    salvarMeta();
+    renderizarPreview(); // capa (des)aparece ao vivo no preview
+  });
+}
+
 // ---------- exportar .odt ----------
 
 document.getElementById("exportar-odt").addEventListener("click", async () => {
@@ -633,6 +1080,8 @@ document.getElementById("exportar-odt").addEventListener("click", async () => {
         math_dims: medirFormulas(),
         // painel de estilos → styles.xml + margens do .odt
         estilos: { ...estilos },
+        // metadados → meta.xml + página de capa (ver metadados.py)
+        meta: { ...meta },
       }),
     });
 
@@ -679,7 +1128,11 @@ setModo(localStorage.getItem(MODO_KEY) === "odt" ? "odt" : "web");
 restaurar();
 restaurarEstilos();
 preencherInputsEstilos();
+marcarPreset(presetAtual());
+restaurarMeta();
+preencherInputsMeta();
 aplicarEstilos();
+sugerirNomeDoH1(); // nome ainda default? → slug do H1
 renderizarPreview();
 checarServidor();
 

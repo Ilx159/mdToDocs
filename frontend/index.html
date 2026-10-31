@@ -132,6 +132,50 @@
   <main class="split" id="split">
     <section class="painel" id="painel-editor">
       <div class="painel-titulo">Markdown</div>
+      <div class="toolbar" role="toolbar" aria-label="Ferramentas de formatação">
+        <button type="button" class="fmt" data-fmt="negrito"
+                title="Negrito (Ctrl+B)"><strong>B</strong></button>
+        <button type="button" class="fmt" data-fmt="italico"
+                title="Itálico (Ctrl+I)"><em>I</em></button>
+        <button type="button" class="fmt" data-fmt="codigo"
+                title="Código em linha (Ctrl+E)">&lt;/&gt;</button>
+        <span class="toolbar-sep"></span>
+        <button type="button" class="fmt" data-fmt="titulo"
+                title="Título">H</button>
+        <button type="button" class="fmt" data-fmt="lista"
+                title="Lista com marcadores">•</button>
+        <button type="button" class="fmt" data-fmt="listaNum"
+                title="Lista numerada">1.</button>
+        <button type="button" class="fmt" data-fmt="citacao"
+                title="Citação">&gt;</button>
+        <span class="toolbar-sep"></span>
+        <button type="button" class="fmt" data-fmt="link" title="Inserir link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+               aria-hidden="true">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+          </svg>
+        </button>
+        <button type="button" class="fmt" data-fmt="tabela" title="Inserir tabela">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+               aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <path d="M3 9h18M3 15h18M9 3v18"/>
+          </svg>
+        </button>
+        <button type="button" class="fmt" data-fmt="imagem"
+                title="Inserir imagem">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+               aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <path d="M21 15l-5-5L5 21"/>
+          </svg>
+        </button>
+      </div>
       <textarea id="editor" spellcheck="false"
                 placeholder="# Escreva seu artigo aqui..."></textarea>
     </section>
@@ -141,11 +185,16 @@
     <section class="painel" id="painel-preview">
       <div class="painel-titulo">
         Preview
-        <div class="modo-grupo" role="group" aria-label="Modo do preview">
-          <button type="button" id="modo-web" class="modo ativo">Web</button>
-          <button type="button" id="modo-odt" class="modo">ODT</button>
+        <div class="painel-titulo-acoes">
+          <button type="button" id="abrir-sumario" class="modo"
+                  title="Sumário navegável dos títulos">Sumário</button>
+          <div class="modo-grupo" role="group" aria-label="Modo do preview">
+            <button type="button" id="modo-web" class="modo ativo">Web</button>
+            <button type="button" id="modo-odt" class="modo">ODT</button>
+          </div>
         </div>
       </div>
+      <nav id="sumario" class="sumario" hidden aria-label="Sumário"></nav>
       <article id="preview" class="preview"></article>
     </section>
   </main>
@@ -176,6 +225,17 @@
     </div>
 
     <div class="drawer-corpo">
+      <div class="bloco-preset">
+        <span class="rotulo">Predefinição</span>
+        <div class="segmentado" id="preset-estilos" role="group"
+             aria-label="Predefinição de estilos">
+          <button type="button" data-valor="padrao">Padrão</button>
+          <button type="button" data-valor="academico">Acadêmico</button>
+          <button type="button" data-valor="relatorio">Relatório</button>
+          <button type="button" data-valor="compacto">Compacto</button>
+        </div>
+      </div>
+
       <fieldset>
         <legend>Texto base</legend>
         <label>Fonte
@@ -361,6 +421,41 @@
         </fieldset>
 
         <fieldset>
+          <legend>Documento</legend>
+
+          <div class="campo coluna">
+            <span class="rotulo">Título (metadados e capa)</span>
+            <input type="text" id="meta-titulo" maxlength="200"
+                   placeholder="Meu artigo" spellcheck="false">
+          </div>
+
+          <div class="campo coluna">
+            <span class="rotulo">Autor</span>
+            <input type="text" id="meta-autor" maxlength="120"
+                   placeholder="Seu nome" spellcheck="false">
+          </div>
+
+          <div class="campo">
+            <span class="rotulo">Data</span>
+            <input type="date" id="meta-data">
+          </div>
+
+          <div class="campo">
+            <span class="rotulo">Página de capa</span>
+            <label class="interruptor"
+                   title="Abre o documento com uma página de capa">
+              <input type="checkbox" id="meta-capa">
+              <span></span>
+            </label>
+          </div>
+
+          <p class="dica">
+            Vira o meta.xml do .odt (título, autor e data) e, quando
+            ligado, o documento começa com a página de capa.
+          </p>
+        </fieldset>
+
+        <fieldset>
           <legend>Layout</legend>
 
           <div class="campo">
@@ -381,6 +476,7 @@
   <script src="vendor/markdown-it-footnote.min.js"></script>
   <script src="vendor/temml.min.js"></script>
   <script src="vendor/texmath.js"></script>
+  <script src="vendor/highlight.min.js"></script>
   <script src="biblioteca.js"></script>
   <script src="interface.js"></script>
   <script src="app.js"></script>

@@ -50,6 +50,13 @@ class ConvertRequest(BaseModel):
             "(ver styles.normalizar)"
         ),
     )
+    meta: dict | None = Field(
+        None,
+        description=(
+            "Metadados do documento {titulo, autor, data, capa}; "
+            "capa só liga com booleano true (ver metadados.normalizar)"
+        ),
+    )
 
 
 @app.get("/api/health")
@@ -74,7 +81,8 @@ def convert(req: ConvertRequest) -> Response:
     blocks = parse(req.markdown)
     try:
         data = render_odt(
-            blocks, math_dims=req.math_dims, estilos=req.estilos
+            blocks, math_dims=req.math_dims, estilos=req.estilos,
+            meta=req.meta,
         )
     except ValueError as e:
         # XML invalido gerado internamente — erro de desenvolvimento,
